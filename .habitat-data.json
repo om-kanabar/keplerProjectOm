@@ -1,0 +1,19 @@
+{
+  "zones": [
+    {
+      "id": "zone-mr88fp8u-u3dzt5",
+      "name": "Alpha",
+      "purpose": "research",
+      "status": "active"
+    },
+    {
+      "id": "zone-mr9fpyjl-r8i1h4",
+      "name": "Beta",
+      "purpose": "storage",
+      "status": "active"
+    }
+  ],
+  "doors": [],
+  "airlocks": [],
+  "mapPlacements": []
+}

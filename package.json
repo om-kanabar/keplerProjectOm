@@ -1,0 +1,19 @@
+{
+  "name": "aerie-habitat",
+  "version": "0.1.1",
+  "description": "A tiny Bun CLI for a habitat on Kepler-422b.",
+  "type": "module",
+  "bin": {
+    "habitat": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "typescript": "^5.9.2"
+  }
+}
