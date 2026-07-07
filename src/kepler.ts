@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { hydrateStarterModules } from "./modules";
 import { readData, writeData } from "./storage";
-import { KeplerRegistration } from "./types";
+import { BlueprintReference, KeplerRegistration, StarterModulePayload } from "./types";
 
 type HabitatRegistrationResponse = {
   habitatId: string;
-  starterModules: unknown[];
-  blueprints: unknown[];
+  starterModules: StarterModulePayload[];
+  blueprints: BlueprintReference[];
 };
 
 type HabitatResponse = {
@@ -117,13 +118,13 @@ export async function registerWithKepler(displayName: string): Promise<KeplerReg
     habitatUuid,
     habitatId: response.habitatId,
     displayName,
-    starterModules: response.starterModules,
     blueprints: response.blueprints,
   };
 
   writeData({
     ...data,
     keplerRegistration: registration,
+    modules: hydrateStarterModules(response.starterModules),
   });
 
   return registration;

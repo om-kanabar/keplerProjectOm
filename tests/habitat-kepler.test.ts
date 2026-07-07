@@ -29,6 +29,10 @@ function readData(): Record<string, unknown> {
   return JSON.parse(readFileSync(dataPath(), "utf8")) as Record<string, unknown>;
 }
 
+function writeData(data: Record<string, unknown>): void {
+  writeFileSync(dataPath(), JSON.stringify(data, null, 2));
+}
+
 async function startTestServer(): Promise<TestServer> {
   const requests: RecordedRequest[] = [];
   const port = await getFreePort();
@@ -55,15 +59,89 @@ async function startTestServer(): Promise<TestServer> {
             habitatId: "habitat-server-123",
             starterModules: [
               {
-                id: "module-1",
-                blueprintId: "hab-core",
-                displayName: "Habitat Core",
+                id: "starter-command-module",
+                blueprintId: "command-module",
+                displayName: "Command Module",
                 connectedTo: [],
-                runtimeAttributes: {},
-                capabilities: ["life-support"],
+                runtimeAttributes: {
+                  status: "active",
+                  health: 100,
+                },
+                capabilities: ["habitat-command"],
+              },
+              {
+                id: "starter-life-support",
+                blueprintId: "life-support",
+                displayName: "Life Support",
+                connectedTo: ["starter-command-module"],
+                runtimeAttributes: {
+                  status: "active",
+                  health: 100,
+                },
+                capabilities: ["atmosphere-control"],
+              },
+              {
+                id: "starter-basic-battery",
+                blueprintId: "basic-battery",
+                displayName: "Basic Battery",
+                connectedTo: ["starter-command-module"],
+                runtimeAttributes: {
+                  status: "offline",
+                  health: 100,
+                },
+                capabilities: ["power-storage"],
+              },
+              {
+                id: "starter-supply-cache",
+                blueprintId: "supply-cache",
+                displayName: "Supply Cache",
+                connectedTo: ["starter-command-module"],
+                runtimeAttributes: {
+                  status: "active",
+                  health: 100,
+                },
+                capabilities: ["storage"],
+              },
+              {
+                id: "starter-workshop",
+                blueprintId: "workshop-fabricator",
+                displayName: "Workshop Fabricator",
+                connectedTo: ["starter-command-module"],
+                runtimeAttributes: {
+                  status: "idle",
+                  health: 100,
+                },
+                capabilities: ["basic-fabrication"],
+              },
+              {
+                id: "starter-suitport",
+                blueprintId: "basic-suitport",
+                displayName: "Basic Suitport",
+                connectedTo: ["starter-life-support"],
+                runtimeAttributes: {
+                  status: "idle",
+                  health: 100,
+                },
+                capabilities: ["suitport-access"],
               },
             ],
-            blueprints: [],
+            blueprints: [
+              {
+                id: "blueprint-1",
+                blueprintId: "command-module",
+                displayName: "Command Module Blueprint",
+                description: "Starter command module blueprint",
+                status: "published",
+                output: {
+                  itemType: "module",
+                  moduleType: "command-module",
+                  quantity: 1,
+                },
+                inputs: {},
+                buildTicks: 100,
+                repeatable: false,
+              },
+            ],
           },
           { status: 201 },
         );
@@ -194,6 +272,80 @@ describe("Kepler habitat registration commands", () => {
         habitatId: "habitat-server-123",
         displayName: "Artemis Ridge",
       });
+      expect(readData().modules).toEqual([
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            health: 100,
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-life-support",
+          blueprintId: "life-support",
+          displayName: "Life Support",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+            health: 100,
+          },
+          capabilities: ["atmosphere-control"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            health: 100,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+            health: 100,
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "idle",
+            health: 100,
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+        {
+          id: "starter-suitport",
+          blueprintId: "basic-suitport",
+          displayName: "Basic Suitport",
+          connectedTo: ["starter-life-support"],
+          runtimeAttributes: {
+            status: "idle",
+            health: 100,
+          },
+          capabilities: ["suitport-access"],
+          source: "starter",
+        },
+      ]);
     } finally {
       server.close();
     }
@@ -205,15 +357,79 @@ describe("Kepler habitat registration commands", () => {
       dataPath(),
       JSON.stringify(
         {
-          zones: [],
-          doors: [],
-          airlocks: [],
-          mapPlacements: [],
           keplerRegistration: {
             habitatUuid: "11111111-1111-4111-8111-111111111111",
             habitatId: "habitat-server-123",
             displayName: "Artemis Ridge",
           },
+          modules: [
+            {
+              id: "starter-command-module",
+              blueprintId: "command-module",
+              displayName: "Command Module",
+              connectedTo: [],
+              runtimeAttributes: {
+                status: "active",
+              },
+              capabilities: ["habitat-command"],
+              source: "starter",
+            },
+            {
+              id: "starter-life-support",
+              blueprintId: "life-support",
+              displayName: "Life Support",
+              connectedTo: ["starter-command-module"],
+              runtimeAttributes: {
+                status: "active",
+              },
+              capabilities: ["atmosphere-control"],
+              source: "starter",
+            },
+            {
+              id: "starter-basic-battery",
+              blueprintId: "basic-battery",
+              displayName: "Basic Battery",
+              connectedTo: ["starter-command-module"],
+              runtimeAttributes: {
+                status: "offline",
+              },
+              capabilities: ["power-storage"],
+              source: "starter",
+            },
+            {
+              id: "starter-supply-cache",
+              blueprintId: "supply-cache",
+              displayName: "Supply Cache",
+              connectedTo: ["starter-command-module"],
+              runtimeAttributes: {
+                status: "active",
+              },
+              capabilities: ["storage"],
+              source: "starter",
+            },
+            {
+              id: "starter-workshop",
+              blueprintId: "workshop-fabricator",
+              displayName: "Workshop Fabricator",
+              connectedTo: ["starter-command-module"],
+              runtimeAttributes: {
+                status: "idle",
+              },
+              capabilities: ["basic-fabrication"],
+              source: "starter",
+            },
+            {
+              id: "starter-suitport",
+              blueprintId: "basic-suitport",
+              displayName: "Basic Suitport",
+              connectedTo: ["starter-life-support"],
+              runtimeAttributes: {
+                status: "idle",
+              },
+              capabilities: ["suitport-access"],
+              source: "starter",
+            },
+          ],
         },
         null,
         2,
@@ -232,6 +448,7 @@ describe("Kepler habitat registration commands", () => {
       expect(result.stdout).toContain("Habitat ID: habitat-server-123");
       expect(result.stdout).toContain("Status: operational");
       expect(result.stdout).toContain("Catalog Version: 2026-06-24");
+      expect(result.stdout).toContain("Modules: 6");
     } finally {
       server.close();
     }
@@ -268,6 +485,340 @@ describe("Kepler habitat registration commands", () => {
       });
       expect(result.stdout).toContain('Unregistered habitat "Artemis Ridge".');
       expect(readData().keplerRegistration).toBeUndefined();
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module list shows hydrated starter modules", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const result = await runHabitat(["module", "list"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Modules");
+      expect(result.stdout).toContain("Command Module");
+      expect(result.stdout).toContain("command-module");
+      expect(result.stdout).toContain("Basic Suitport");
+      expect(result.stdout).not.toContain("starter-command-module");
+      expect(result.stdout).not.toContain("starter-suitport");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module show prints starter module details", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const result = await runHabitat(["module", "show", "starter-life-support"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Module");
+      expect(result.stdout).toContain("ID: starter-life-support");
+      expect(result.stdout).toContain("Blueprint: life-support");
+      expect(result.stdout).toContain("Source: starter");
+      expect(result.stdout).toContain("atmosphere-control");
+      expect(result.stdout).toContain('"status": "active"');
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module create stores a new local module", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const result = await runHabitat(
+        [
+          "module",
+          "create",
+          "--blueprint",
+          "storage-module",
+          "--name",
+          "Cargo Annex",
+          "--connect",
+          "starter-command-module",
+          "--capability",
+          "bulk-storage",
+          "--runtime-attributes",
+          '{"status":"active","health":88}',
+        ],
+        server,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Created module "Cargo Annex".');
+      expect(result.stdout).toContain("Blueprint: storage-module");
+
+      const modules = readData().modules as Array<Record<string, unknown>>;
+      const created = modules.find((module) => module.displayName === "Cargo Annex");
+
+      expect(created).toMatchObject({
+        blueprintId: "storage-module",
+        displayName: "Cargo Annex",
+        connectedTo: ["starter-command-module"],
+        capabilities: ["bulk-storage"],
+        source: "local",
+        runtimeAttributes: {
+          status: "active",
+          health: 88,
+        },
+      });
+      expect(created?.id).toEqual(expect.any(String));
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module update patches local module fields", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "local-storage-1",
+          blueprintId: "storage-module",
+          displayName: "Storage Alpha",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "idle",
+            health: 100,
+          },
+          capabilities: ["storage"],
+          source: "local",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(
+        [
+          "module",
+          "update",
+          "local-storage-1",
+          "--name",
+          "Storage Beta",
+          "--set-status",
+          "active",
+          "--connect",
+          "starter-command-module",
+          "--add-capability",
+          "bulk-storage",
+          "--remove-capability",
+          "storage",
+          "--runtime-attributes",
+          '{"health":72,"status":"damaged"}',
+        ],
+        server,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Updated module "Storage Beta".');
+
+      const updated = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "local-storage-1",
+      );
+
+      expect(updated).toMatchObject({
+        id: "local-storage-1",
+        blueprintId: "storage-module",
+        displayName: "Storage Beta",
+        connectedTo: ["starter-command-module"],
+        capabilities: ["bulk-storage"],
+        runtimeAttributes: {
+          health: 72,
+          status: "active",
+        },
+        source: "local",
+      });
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module delete removes non-starter modules", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "local-storage-1",
+          blueprintId: "storage-module",
+          displayName: "Storage Alpha",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "idle",
+          },
+          capabilities: ["storage"],
+          source: "local",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "delete", "local-storage-1"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Deleted module "Storage Alpha".');
+      expect((readData().modules as Array<Record<string, unknown>>).map((module) => module.id)).toEqual([
+        "starter-command-module",
+      ]);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module delete rejects starter modules", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "delete", "starter-command-module"], server);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Starter modules cannot be deleted.");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module commands fail clearly when the module does not exist", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [],
+    });
+
+    try {
+      const showResult = await runHabitat(["module", "show", "missing-module"], server);
+      expect(showResult.exitCode).toBe(1);
+      expect(showResult.stderr).toContain('Module "missing-module" was not found.');
+
+      const updateResult = await runHabitat(["module", "update", "missing-module", "--name", "Ghost"], server);
+      expect(updateResult.exitCode).toBe(1);
+      expect(updateResult.stderr).toContain('Module "missing-module" was not found.');
+
+      const deleteResult = await runHabitat(["module", "delete", "missing-module"], server);
+      expect(deleteResult.exitCode).toBe(1);
+      expect(deleteResult.stderr).toContain('Module "missing-module" was not found.');
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module commands accept the short suffix of habitat-scoped module ids", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "1f229c04-b7e7-46ee-b571-9e6d70248833",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "habitat_1f229c04_b7e7_46ee_b571_9e6d70248833_command_module_1",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "local-storage-1",
+          blueprintId: "storage-module",
+          displayName: "Storage Alpha",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "idle",
+          },
+          capabilities: ["storage"],
+          source: "local",
+        },
+      ],
+    });
+
+    try {
+      const showResult = await runHabitat(["module", "show", "command_module_1"], server);
+      expect(showResult.exitCode).toBe(0);
+      expect(showResult.stdout).toContain("ID: habitat_1f229c04_b7e7_46ee_b571_9e6d70248833_command_module_1");
+
+      const updateResult = await runHabitat(
+        ["module", "update", "local-storage-1", "--connect", "command_module_1"],
+        server,
+      );
+      expect(updateResult.exitCode).toBe(0);
+      expect(
+        (
+          (readData().modules as Array<Record<string, unknown>>).find((module) => module.id === "local-storage-1") as {
+            connectedTo: string[];
+          }
+        ).connectedTo,
+      ).toEqual(["habitat_1f229c04_b7e7_46ee_b571_9e6d70248833_command_module_1"]);
+
+      const deleteResult = await runHabitat(["module", "delete", "command_module_1"], server);
+      expect(deleteResult.exitCode).toBe(1);
+      expect(deleteResult.stderr).toContain("Starter modules cannot be deleted.");
     } finally {
       server.close();
     }

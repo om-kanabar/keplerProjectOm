@@ -1,3 +1,20 @@
+export type RuntimeAttributes = Record<string, unknown>;
+
+export type BlueprintReference = Record<string, unknown>;
+
+export type StarterModulePayload = {
+  id: string;
+  blueprintId: string;
+  displayName: string;
+  connectedTo: string[];
+  runtimeAttributes: RuntimeAttributes;
+  capabilities: string[];
+};
+
+export type HabitatModule = StarterModulePayload & {
+  source: "starter" | "local";
+};
+
 export type KeplerRegistration = {
   habitatUuid: string;
   habitatId: string;
@@ -6,10 +23,10 @@ export type KeplerRegistration = {
   catalogVersion?: string;
   status?: string;
   lastSeenAt?: string | null;
-  starterModules?: unknown[];
-  blueprints?: unknown[];
+  blueprints?: BlueprintReference[];
 };
 
-export type HabitatData = {
+export type HabitatData = Record<string, unknown> & {
   keplerRegistration?: KeplerRegistration;
+  modules?: HabitatModule[];
 };
