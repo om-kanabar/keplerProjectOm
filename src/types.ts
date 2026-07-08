@@ -12,6 +12,17 @@ export type BlueprintReference = {
   repeatable?: boolean;
 } & Record<string, unknown>;
 
+export type ResourceReference = {
+  id?: string;
+  resourceId: string;
+  displayName: string;
+  name?: string;
+  description?: string;
+  status?: string;
+  output?: Record<string, unknown>;
+  inputs?: Record<string, unknown>;
+} & Record<string, unknown>;
+
 export type StarterModulePayload = {
   id: string;
   blueprintId: string;
@@ -33,6 +44,16 @@ export type TickSimulationResult = {
   stoppedReason: TickStoppedReason;
   totalPowerDrawKw: number;
   energyConsumedKwh: number;
+  batteryChargeBeforeKwh: number;
+  batteryChargeAfterKwh: number;
+};
+
+export type BatteryRechargeResult = {
+  requestedTicks: number;
+  completedTicks: number;
+  stoppedReason: TickStoppedReason;
+  totalPowerDrawKw: number;
+  energyAddedKwh: number;
   batteryChargeBeforeKwh: number;
   batteryChargeAfterKwh: number;
 };

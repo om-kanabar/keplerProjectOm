@@ -1,21 +1,45 @@
 import { readData, writeData } from "./storage";
-import { HabitatModule, RuntimeAttributes, TickSimulationResult } from "./types";
+import { BatteryRechargeResult, HabitatModule, RuntimeAttributes, TickSimulationResult } from "./types";
 
 const BATTERY_BLUEPRINT_IDS = new Set(["basic-battery", "battery-bank"]);
 const TICK_RATIO_EPSILON = 1e-9;
-const TICKS_PER_HOUR = 3600;
-
 export function runTickSimulation(requestedTicks: number): TickSimulationResult {
-  if (!Number.isInteger(requestedTicks) || requestedTicks === 0) {
-    throw new Error("Tick count must be a non-zero integer.");
+  if (!Number.isInteger(requestedTicks) || requestedTicks <= 0) {
+    throw new Error("Tick count must be a positive integer.");
   }
 
+  return runPowerFlowSimulation(requestedTicks, 1);
+}
+
+export function runBatteryRechargeSimulation(requestedTicks: number): BatteryRechargeResult {
+  if (!Number.isInteger(requestedTicks) || requestedTicks <= 0) {
+    throw new Error("Recharge tick count must be a positive integer.");
+  }
+
+  const result = runPowerFlowSimulation(requestedTicks, -1);
+
+  return {
+    requestedTicks: result.requestedTicks,
+    completedTicks: Math.abs(result.completedTicks),
+    stoppedReason: result.stoppedReason,
+    totalPowerDrawKw: result.totalPowerDrawKw,
+    energyAddedKwh: -result.energyConsumedKwh,
+    batteryChargeBeforeKwh: result.batteryChargeBeforeKwh,
+    batteryChargeAfterKwh: result.batteryChargeAfterKwh,
+  };
+}
+
+export function isBatteryModule(module: HabitatModule): boolean {
+  return BATTERY_BLUEPRINT_IDS.has(module.blueprintId);
+}
+
+function runPowerFlowSimulation(requestedTicks: number, direction: 1 | -1): TickSimulationResult {
   const data = readData();
   const modules = data.modules ?? [];
   const batteries = modules.filter(isBatteryModule);
 
   if (batteries.length === 0) {
-    throw new Error("No battery modules are available for ticking.");
+    throw new Error(direction > 0 ? "No battery modules are available for ticking." : "No battery modules are available for recharging.");
   }
 
   const totalPowerDrawKw = calculateTotalPowerDrawKw(modules);
@@ -23,10 +47,8 @@ export function runTickSimulation(requestedTicks: number): TickSimulationResult 
   const batteryReserveKwh = sumBatteryMetric(batteries, "reserveKwh");
   const batteryCapacityKwh = sumBatteryMetric(batteries, "energyStorageKwh");
   const energyPerTickKwh = totalPowerDrawKw / 3600;
-  const direction = Math.sign(requestedTicks);
-  const requestedTickCount = Math.abs(requestedTicks);
   const completedTickCount = calculateCompletedTicks(
-    requestedTickCount,
+    requestedTicks,
     batteryChargeBeforeKwh,
     batteryReserveKwh,
     batteryCapacityKwh,
@@ -46,41 +68,11 @@ export function runTickSimulation(requestedTicks: number): TickSimulationResult 
   return {
     requestedTicks,
     completedTicks,
-    stoppedReason: getStoppedReason(requestedTicks, completedTicks),
+    stoppedReason: getStoppedReason(requestedTicks * direction, completedTicks),
     totalPowerDrawKw,
     energyConsumedKwh,
     batteryChargeBeforeKwh,
     batteryChargeAfterKwh,
-  };
-}
-
-export function isBatteryModule(module: HabitatModule): boolean {
-  return BATTERY_BLUEPRINT_IDS.has(module.blueprintId);
-}
-
-export function summarizePowerState(modules: HabitatModule[]): {
-  batteryChargeKwh: number;
-  batteryCapacityKwh: number;
-  drainPerTickKwh: number;
-  drainPerTickHourKwh: number;
-  rows: Array<{ moduleId: string; displayName: string; status: string; drawKw: number; drawPerTickHourKwh: number }>;
-} {
-  const batteries = modules.filter(isBatteryModule);
-  const totalPowerDrawKw = calculateTotalPowerDrawKw(modules);
-  const drainPerTickKwh = totalPowerDrawKw / 3600;
-
-  return {
-    batteryChargeKwh: sumBatteryMetric(batteries, "currentEnergyKwh"),
-    batteryCapacityKwh: sumBatteryMetric(batteries, "energyStorageKwh"),
-    drainPerTickKwh,
-    drainPerTickHourKwh: drainPerTickKwh * TICKS_PER_HOUR,
-    rows: modules.map((module) => ({
-      moduleId: module.id,
-      displayName: module.displayName,
-      status: typeof module.runtimeAttributes.status === "string" ? module.runtimeAttributes.status : "(unknown)",
-      drawKw: getModulePowerDrawKw(module),
-      drawPerTickHourKwh: (getModulePowerDrawKw(module) / 3600) * TICKS_PER_HOUR,
-    })),
   };
 }
 

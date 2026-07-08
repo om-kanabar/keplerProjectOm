@@ -3,7 +3,7 @@ import { getBlueprint } from "./blueprints";
 import { readData, writeData } from "./storage";
 import { HabitatData, HabitatModule, RuntimeAttributes, StarterModulePayload } from "./types";
 
-export const VALID_MODULE_STATUSES = ["offline", "idle", "online", "active", "damaged"] as const;
+export const VALID_MODULE_STATUSES = ["offline", "idle", "active", "damaged"] as const;
 
 type CreateModuleInput = {
   blueprintId: string;
@@ -48,9 +48,9 @@ export function getModule(moduleId: string): HabitatModule {
   return module;
 }
 
-export function createModule(input: CreateModuleInput): HabitatModule {
+export async function createModule(input: CreateModuleInput): Promise<HabitatModule> {
   const data = readData();
-  getBlueprint(input.blueprintId);
+  await getBlueprint(input.blueprintId);
   const module: HabitatModule = {
     id: randomUUID(),
     blueprintId: input.blueprintId,

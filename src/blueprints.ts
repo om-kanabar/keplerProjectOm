@@ -1,22 +1,18 @@
-import { readData } from "./storage";
-import { BlueprintReference, HabitatModule } from "./types";
+import { fetchKeplerBlueprintCatalog } from "./kepler";
+import { BlueprintReference } from "./types";
 
-export function listBlueprints(): BlueprintReference[] {
-  return readData().keplerRegistration?.blueprints ?? [];
+export async function listBlueprints(): Promise<BlueprintReference[]> {
+  return fetchKeplerBlueprintCatalog();
 }
 
-export function getBlueprint(blueprintId: string): BlueprintReference {
-  const blueprint = listBlueprints().find((entry) => entry.blueprintId === blueprintId);
+export async function getBlueprint(blueprintId: string): Promise<BlueprintReference> {
+  const blueprint = (await listBlueprints()).find((entry) => entry.blueprintId === blueprintId);
 
   if (!blueprint) {
-    throw new Error(`Blueprint "${blueprintId}" is not available in this habitat.`);
+    throw new Error(`Blueprint "${blueprintId}" was not found in Kepler's catalog.`);
   }
 
   return blueprint;
-}
-
-export function isBasicStartBlueprint(blueprintId: string, modules: HabitatModule[]): boolean {
-  return modules.some((module) => module.source === "starter" && module.blueprintId === blueprintId);
 }
 
 export function formatBlueprintOutput(blueprint: BlueprintReference): string | undefined {
@@ -25,14 +21,29 @@ export function formatBlueprintOutput(blueprint: BlueprintReference): string | u
   }
 
   const output = blueprint.output as Record<string, unknown>;
+  const itemType = typeof output.itemType === "string" ? output.itemType : undefined;
+  const moduleType = typeof output.moduleType === "string" ? output.moduleType : undefined;
+  const quantity = typeof output.quantity === "number" && output.quantity > 1 ? ` x${output.quantity}` : "";
 
-  if (typeof output.moduleType === "string") {
-    return output.moduleType;
+  if (moduleType) {
+    return `module: ${moduleType}${quantity}`;
   }
 
-  if (typeof output.itemType === "string") {
-    return output.itemType === "module" ? blueprint.blueprintId : blueprint.blueprintId;
+  if (itemType) {
+    return `${itemType}${quantity}`;
   }
 
   return undefined;
+}
+
+export function formatBlueprintValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") {
+    return "(none)";
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
 }

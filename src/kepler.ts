@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { hydrateStarterModules } from "./modules";
 import { readData, writeData } from "./storage";
-import { BlueprintReference, KeplerRegistration, StarterModulePayload } from "./types";
+import { BlueprintReference, KeplerRegistration, ResourceReference, StarterModulePayload } from "./types";
 
 type HabitatRegistrationResponse = {
   habitatId: string;
@@ -19,6 +19,14 @@ type HabitatResponse = {
     lastSeenAt?: string | null;
   };
 };
+
+type BlueprintCatalogResponse = {
+  blueprints: BlueprintReference[];
+} | BlueprintReference[];
+
+type ResourceCatalogResponse = {
+  resources: ResourceReference[];
+} | ResourceReference[];
 
 const DEFAULT_BASE_URL = "https://planet.turingguild.com";
 
@@ -163,4 +171,24 @@ export async function unregisterFromKepler(): Promise<KeplerRegistration> {
   writeData(remainingData);
 
   return registration;
+}
+
+export async function fetchKeplerBlueprintCatalog(): Promise<BlueprintReference[]> {
+  const response = await requestKepler<BlueprintCatalogResponse>("GET", "/catalog/blueprints");
+
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  return response.blueprints ?? [];
+}
+
+export async function fetchKeplerResourceCatalog(): Promise<ResourceReference[]> {
+  const response = await requestKepler<ResourceCatalogResponse>("GET", "/catalog/resources");
+
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  return response.resources ?? [];
 }
