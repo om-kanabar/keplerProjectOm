@@ -3,7 +3,7 @@ import { HabitatModule, RuntimeAttributes, TickSimulationResult } from "./types"
 
 const BATTERY_BLUEPRINT_IDS = new Set(["basic-battery", "battery-bank"]);
 const TICK_RATIO_EPSILON = 1e-9;
-const TICKS_PER_HOUR = 1600;
+const TICKS_PER_HOUR = 3600;
 
 export function runTickSimulation(requestedTicks: number): TickSimulationResult {
   if (!Number.isInteger(requestedTicks) || requestedTicks === 0) {

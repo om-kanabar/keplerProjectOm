@@ -1233,7 +1233,7 @@ describe("Kepler habitat registration commands", () => {
       expect(parsed.data.registration.habitatId).toBe("habitat-server-123");
       expect(parsed.data.registration.status).toBe("operational");
       expect(parsed.data.power.batteryChargeKwh).toBe(500);
-      expect(parsed.data.power.drainPerTickHourKwh).toBeCloseTo(0.8888888889, 10);
+      expect(parsed.data.power.drainPerTickHourKwh).toBeCloseTo(2, 10);
     } finally {
       server.close();
     }
@@ -1769,7 +1769,7 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
-  test("tick accepts hour shorthand and converts one hour to 1600 ticks", async () => {
+  test("tick accepts hour shorthand and converts one hour to 3600 ticks", async () => {
     const server = await startTestServer();
     writeData({
       keplerRegistration: {
@@ -1814,16 +1814,16 @@ describe("Kepler habitat registration commands", () => {
       const result = await runHabitat(["tick", "1", "hour"], server);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("Requested Ticks: 1600");
-      expect(result.stdout).toContain("Completed Ticks: 1600");
-      expect(result.stdout).toContain("Energy Consumed: 1.333333 kWh");
-      expect(result.stdout).toContain("Battery Charge After: 498.666667 kWh");
+      expect(result.stdout).toContain("Requested Ticks: 3600");
+      expect(result.stdout).toContain("Completed Ticks: 3600");
+      expect(result.stdout).toContain("Energy Consumed: 3 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 497 kWh");
     } finally {
       server.close();
     }
   });
 
-  test("tick accepts multi-hour shorthand and converts two hour to 3200 ticks", async () => {
+  test("tick accepts multi-hour shorthand and converts two hour to 7200 ticks", async () => {
     const server = await startTestServer();
     writeData({
       keplerRegistration: {
@@ -1868,10 +1868,10 @@ describe("Kepler habitat registration commands", () => {
       const result = await runHabitat(["tick", "2", "hour"], server);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("Requested Ticks: 3200");
-      expect(result.stdout).toContain("Completed Ticks: 3200");
-      expect(result.stdout).toContain("Energy Consumed: 2.666667 kWh");
-      expect(result.stdout).toContain("Battery Charge After: 497.333333 kWh");
+      expect(result.stdout).toContain("Requested Ticks: 7200");
+      expect(result.stdout).toContain("Completed Ticks: 7200");
+      expect(result.stdout).toContain("Energy Consumed: 6 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 494 kWh");
     } finally {
       server.close();
     }

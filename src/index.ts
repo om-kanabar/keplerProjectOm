@@ -888,5 +888,5 @@ function normalizeTickArgs(argv: string[]): string[] {
     return argv;
   }
 
-  return [argv[0], argv[1], "tick", String(tickCount * 1600)];
+  return [argv[0], argv[1], "tick", String(tickCount * 3600)];
 }
