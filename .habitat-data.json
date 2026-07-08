@@ -1104,7 +1104,7 @@
       "displayName": "Basic Battery",
       "runtimeAttributes": {
         "health": 100,
-        "status": "offline",
+        "status": "online",
         "crewCapacity": 0,
         "physicalVolumeM3": 8,
         "currentEnergyKwh": 500,
@@ -1213,15 +1213,6 @@
         "habitat_1f229c04_b7e7_46ee_b571_9e6d70248833_command_module_1"
       ],
       "source": "starter"
-    },
-    {
-      "id": "7ce492bf-9e1e-430f-8309-ac4a9ad7275f",
-      "blueprintId": "storage-module",
-      "displayName": "Cargo Annex",
-      "connectedTo": [],
-      "capabilities": [],
-      "runtimeAttributes": {},
-      "source": "local"
     }
   ]
 }

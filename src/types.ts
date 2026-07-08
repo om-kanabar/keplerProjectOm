@@ -1,6 +1,16 @@
 export type RuntimeAttributes = Record<string, unknown>;
 
-export type BlueprintReference = Record<string, unknown>;
+export type BlueprintReference = {
+  id?: string;
+  blueprintId: string;
+  displayName: string;
+  description?: string;
+  status?: string;
+  output?: Record<string, unknown>;
+  inputs?: Record<string, unknown>;
+  buildTicks?: number;
+  repeatable?: boolean;
+} & Record<string, unknown>;
 
 export type StarterModulePayload = {
   id: string;
@@ -13,6 +23,18 @@ export type StarterModulePayload = {
 
 export type HabitatModule = StarterModulePayload & {
   source: "starter" | "local";
+};
+
+export type TickStoppedReason = "completed" | "reserve_reached" | "capacity_reached";
+
+export type TickSimulationResult = {
+  requestedTicks: number;
+  completedTicks: number;
+  stoppedReason: TickStoppedReason;
+  totalPowerDrawKw: number;
+  energyConsumedKwh: number;
+  batteryChargeBeforeKwh: number;
+  batteryChargeAfterKwh: number;
 };
 
 export type KeplerRegistration = {

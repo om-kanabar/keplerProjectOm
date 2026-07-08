@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { HabitatData, HabitatModule, KeplerRegistration } from "./types";
 
 const DATA_FILE_NAME = ".habitat-data.json";
+const MODULES_FILE_NAME = "habitat-modules.json";
 
 export function readData(): HabitatData {
   const filePath = join(process.cwd(), DATA_FILE_NAME);
@@ -27,8 +28,11 @@ export function readData(): HabitatData {
 }
 
 export function writeData(data: HabitatData): void {
-  const filePath = join(process.cwd(), DATA_FILE_NAME);
-  writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+  const dataFilePath = join(process.cwd(), DATA_FILE_NAME);
+  const modulesFilePath = join(process.cwd(), MODULES_FILE_NAME);
+
+  writeFileSync(dataFilePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+  writeFileSync(modulesFilePath, `${JSON.stringify(data.modules ?? [], null, 2)}\n`, "utf8");
 }
 
 function parseKeplerRegistration(value: unknown): KeplerRegistration | undefined {

@@ -25,6 +25,10 @@ function dataPath(): string {
   return join(workdir, ".habitat-data.json");
 }
 
+function modulesPath(): string {
+  return join(workdir, "habitat-modules.json");
+}
+
 function readData(): Record<string, unknown> {
   return JSON.parse(readFileSync(dataPath(), "utf8")) as Record<string, unknown>;
 }
@@ -88,6 +92,20 @@ async function startTestServer(): Promise<TestServer> {
                 runtimeAttributes: {
                   status: "offline",
                   health: 100,
+                  currentEnergyKwh: 500,
+                  energyStorageKwh: 500,
+                  reserveKwh: 60,
+                  maxPowerOutputKw: 40,
+                  powerDrawKw: {
+                    offline: 0,
+                    online: 0.5,
+                    active: 2,
+                    damaged: 0.5,
+                  },
+                  oxygenUseKgPerHour: 0,
+                  crewAccessCapacity: 1,
+                  suitOxygenRemainingKg: 0,
+                  suitOxygenCapacityKg: 0,
                 },
                 capabilities: ["power-storage"],
               },
@@ -140,6 +158,50 @@ async function startTestServer(): Promise<TestServer> {
                 inputs: {},
                 buildTicks: 100,
                 repeatable: false,
+              },
+              {
+                id: "blueprint-2",
+                blueprintId: "basic-battery",
+                displayName: "Basic Battery Blueprint",
+                description: "Starter battery blueprint",
+                status: "published",
+                output: {
+                  itemType: "module",
+                  moduleType: "basic-battery",
+                  quantity: 1,
+                },
+                inputs: {},
+                buildTicks: 100,
+                repeatable: true,
+              },
+              {
+                id: "blueprint-3",
+                blueprintId: "storage-module",
+                displayName: "Storage Module Blueprint",
+                description: "Storage module blueprint",
+                status: "published",
+                output: {
+                  itemType: "module",
+                  moduleType: "storage-module",
+                  quantity: 1,
+                },
+                inputs: {},
+                buildTicks: 100,
+                repeatable: true,
+              },
+              {
+                id: "blueprint-4",
+                blueprintId: "survey-rover",
+                displayName: "Survey Rover Blueprint",
+                description: "Survey rover blueprint",
+                status: "published",
+                output: {
+                  itemType: "rover",
+                  quantity: 1,
+                },
+                inputs: {},
+                buildTicks: 100,
+                repeatable: true,
               },
             ],
           },
@@ -305,6 +367,20 @@ describe("Kepler habitat registration commands", () => {
           runtimeAttributes: {
             status: "offline",
             health: 100,
+            currentEnergyKwh: 500,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              offline: 0,
+              online: 0.5,
+              active: 2,
+              damaged: 0.5,
+            },
+            oxygenUseKgPerHour: 0,
+            crewAccessCapacity: 1,
+            suitOxygenRemainingKg: 0,
+            suitOxygenCapacityKg: 0,
           },
           capabilities: ["power-storage"],
           source: "starter",
@@ -392,6 +468,20 @@ describe("Kepler habitat registration commands", () => {
               connectedTo: ["starter-command-module"],
               runtimeAttributes: {
                 status: "offline",
+                currentEnergyKwh: 500,
+                energyStorageKwh: 500,
+                reserveKwh: 60,
+                maxPowerOutputKw: 40,
+                powerDrawKw: {
+                  offline: 0,
+                  online: 0.5,
+                  active: 2,
+                  damaged: 0.5,
+                },
+                oxygenUseKgPerHour: 0,
+                crewAccessCapacity: 1,
+                suitOxygenRemainingKg: 0,
+                suitOxygenCapacityKg: 0,
               },
               capabilities: ["power-storage"],
               source: "starter",
@@ -449,6 +539,16 @@ describe("Kepler habitat registration commands", () => {
       expect(result.stdout).toContain("Status: operational");
       expect(result.stdout).toContain("Catalog Version: 2026-06-24");
       expect(result.stdout).toContain("Modules: 6");
+      expect(result.stdout).toContain("Current Battery Level: 500 / 500 kWh");
+      expect(result.stdout).toContain("Drain Per Tick: 0 kWh");
+      expect(result.stdout).toContain("Drain Per Tick Hour: 0 kWh");
+      expect(result.stdout).toContain("Power Draw");
+      expect(result.stdout).toContain("| Module              | Status  | Draw | Draw per Tick Hour |");
+      expect(result.stdout).toContain("| Command Module      | active  | 0 kW | 0 kWh              |");
+      expect(result.stdout).toContain("| Life Support        | active  | 0 kW | 0 kWh              |");
+      expect(result.stdout).toContain("| Basic Battery       | offline | 0 kW | 0 kWh              |");
+      expect(result.stdout).toContain("- Command Module | command-module | status=active");
+      expect(result.stdout).toContain("- Basic Battery | basic-battery | status=offline");
     } finally {
       server.close();
     }
@@ -502,6 +602,9 @@ describe("Kepler habitat registration commands", () => {
       expect(result.stdout).toContain("Command Module");
       expect(result.stdout).toContain("command-module");
       expect(result.stdout).toContain("Basic Suitport");
+      expect(result.stdout).toContain("status=active");
+      expect(result.stdout).toContain("status=idle");
+      expect(result.stdout).toContain("condition=(unknown)");
       expect(result.stdout).not.toContain("starter-command-module");
       expect(result.stdout).not.toContain("starter-suitport");
     } finally {
@@ -509,20 +612,79 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
-  test("module show prints starter module details", async () => {
+  test("module status prints only runtime status and power draw", async () => {
     const server = await startTestServer();
 
     try {
       await runHabitat(["register", "--name", "Artemis Ridge"], server);
-      const result = await runHabitat(["module", "show", "starter-life-support"], server);
+      const result = await runHabitat(["module", "starter-life-support", "status"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Module Status");
+      expect(result.stdout).toContain("ID: starter-life-support");
+      expect(result.stdout).toContain("Status: active");
+      expect(result.stdout).toContain("Power Draw: 0 kW");
+      expect(result.stdout).not.toContain("Blueprint:");
+      expect(result.stdout).not.toContain("Source:");
+      expect(result.stdout).not.toContain("Capabilities:");
+      expect(result.stdout).not.toContain("Key Properties");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module status for battery modules shows only status and current power draw", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const result = await runHabitat(["module", "basic-battery", "status"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Module Status");
+      expect(result.stdout).toContain("ID: starter-basic-battery");
+      expect(result.stdout).toContain("Status: offline");
+      expect(result.stdout).toContain("Power Draw: 0 kW");
+      expect(result.stdout).not.toContain("Current Charge:");
+      expect(result.stdout).not.toContain("Capacity:");
+      expect(result.stdout).not.toContain("Power draw by state");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module info prints the detailed module view", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const result = await runHabitat(["module", "starter-life-support", "info"], server);
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("Module");
       expect(result.stdout).toContain("ID: starter-life-support");
       expect(result.stdout).toContain("Blueprint: life-support");
       expect(result.stdout).toContain("Source: starter");
-      expect(result.stdout).toContain("atmosphere-control");
-      expect(result.stdout).toContain('"status": "active"');
+      expect(result.stdout).toContain("Capabilities: atmosphere-control");
+      expect(result.stdout).toContain("Key Properties");
+      expect(result.stdout).toContain("Status: active");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("blueprint list shows cached kepler blueprints with basic-start markers", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const result = await runHabitat(["blueprint", "list"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Blueprints");
+      expect(result.stdout).toContain("Command Module Blueprint | Basic Start | command-module | command-module");
+      expect(result.stdout).toContain("Basic Battery Blueprint | Basic Start | basic-battery | basic-battery");
+      expect(result.stdout).toContain("Survey Rover Blueprint | survey-rover");
     } finally {
       server.close();
     }
@@ -570,6 +732,23 @@ describe("Kepler habitat registration commands", () => {
         },
       });
       expect(created?.id).toEqual(expect.any(String));
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module create rejects blueprint ids that are not in the cached kepler catalog", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const result = await runHabitat(
+        ["module", "create", "--blueprint", "made-up-blueprint", "--name", "Ghost Module"],
+        server,
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Blueprint "made-up-blueprint" is not available in this habitat.');
     } finally {
       server.close();
     }
@@ -703,6 +882,51 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
+  test("module delete removes a non-starter module when using a CRUD alias", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "7ce492bf-9e1e-430f-8309-ac4a9ad7275f",
+          blueprintId: "storage-module",
+          displayName: "Cargo Annex",
+          connectedTo: [],
+          runtimeAttributes: {},
+          capabilities: ["storage"],
+          source: "local",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "delete", "storage-module"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Deleted module "Cargo Annex".');
+      expect((readData().modules as Array<Record<string, unknown>>).map((module) => module.id)).toEqual([
+        "starter-command-module",
+      ]);
+    } finally {
+      server.close();
+    }
+  });
+
   test("module delete rejects starter modules", async () => {
     const server = await startTestServer();
     writeData({
@@ -799,7 +1023,7 @@ describe("Kepler habitat registration commands", () => {
     });
 
     try {
-      const showResult = await runHabitat(["module", "show", "command_module_1"], server);
+      const showResult = await runHabitat(["module", "command_module_1", "status"], server);
       expect(showResult.exitCode).toBe(0);
       expect(showResult.stdout).toContain("ID: habitat_1f229c04_b7e7_46ee_b571_9e6d70248833_command_module_1");
 
@@ -819,6 +1043,895 @@ describe("Kepler habitat registration commands", () => {
       const deleteResult = await runHabitat(["module", "delete", "command_module_1"], server);
       expect(deleteResult.exitCode).toBe(1);
       expect(deleteResult.stderr).toContain("Starter modules cannot be deleted.");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module update accepts blueprint-style aliases and the --status flag", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "habitat_11111111_1111_4111_8111_111111111111_command_module_1",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            condition: 100,
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const updateResult = await runHabitat(
+        ["module", "update", "command-module", "--status", "maintenance"],
+        server,
+      );
+
+      expect(updateResult.exitCode).toBe(0);
+      expect(updateResult.stdout).toContain('Updated module "Command Module".');
+
+      const showResult = await runHabitat(["module", "command-module", "status"], server);
+      expect(showResult.exitCode).toBe(0);
+      expect(showResult.stdout).toContain("Status: maintenance");
+      expect(showResult.stdout).not.toContain("Condition: 100");
+
+      const infoResult = await runHabitat(["module", "command-module", "info"], server);
+      expect(infoResult.exitCode).toBe(0);
+      expect(infoResult.stdout).toContain("Condition: 100");
+
+      const secondUpdateResult = await runHabitat(
+        ["module", "update", "command-module-1", "--condition", "87"],
+        server,
+      );
+      expect(secondUpdateResult.exitCode).toBe(0);
+
+      const secondShowResult = await runHabitat(["module", "command-module-1", "status"], server);
+      expect(secondShowResult.exitCode).toBe(0);
+      expect(secondShowResult.stdout).toContain("Status: maintenance");
+      expect(secondShowResult.stdout).not.toContain("Condition: 87");
+
+      const secondInfoResult = await runHabitat(["module", "command-module-1", "info"], server);
+      expect(secondInfoResult.exitCode).toBe(0);
+      expect(secondInfoResult.stdout).toContain("Condition: 87");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module set-status updates only runtime status, validates values, and writes habitat-modules.json", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "idle",
+            health: 100,
+            powerDrawKw: {
+              offline: 0,
+              idle: 0.25,
+              active: 2,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "set-status", "starter-command-module", "active"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Module ID: starter-command-module");
+      expect(result.stdout).toContain("Status: active");
+      expect(result.stdout).toContain("Power Draw: 2 kW");
+
+      const updated = (readData().modules as Array<Record<string, unknown>>)[0] as {
+        runtimeAttributes: Record<string, unknown>;
+      };
+      expect(updated.runtimeAttributes).toMatchObject({
+        status: "active",
+        health: 100,
+      });
+
+      const modulesFile = JSON.parse(readFileSync(modulesPath(), "utf8")) as Array<Record<string, unknown>>;
+      expect(modulesFile[0]).toMatchObject({
+        id: "starter-command-module",
+        runtimeAttributes: {
+          status: "active",
+          health: 100,
+        },
+      });
+
+      const invalidResult = await runHabitat(["module", "set-status", "starter-command-module", "broken"], server);
+      expect(invalidResult.exitCode).toBe(1);
+      expect(invalidResult.stderr).toContain(
+        "Status must be one of: offline, idle, online, active, damaged.",
+      );
+    } finally {
+      server.close();
+    }
+  });
+
+  test("status supports --json output", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 2,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 500,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["status", "--json"], server);
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout) as {
+        ok: boolean;
+        data: {
+          registration: { habitatId: string; status: string };
+          power: { batteryChargeKwh: number; drainPerTickHourKwh: number };
+        };
+      };
+
+      expect(parsed.ok).toBe(true);
+      expect(parsed.data.registration.habitatId).toBe("habitat-server-123");
+      expect(parsed.data.registration.status).toBe("operational");
+      expect(parsed.data.power.batteryChargeKwh).toBe(500);
+      expect(parsed.data.power.drainPerTickHourKwh).toBeCloseTo(0.8888888889, 10);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module set-status supports --json output at the end", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "idle",
+            powerDrawKw: {
+              offline: 0,
+              active: 2,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "set-status", "starter-command-module", "active", "--json"], server);
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout) as {
+        ok: boolean;
+        data: { moduleId: string; status: string; powerDrawKw: number };
+      };
+
+      expect(parsed.ok).toBe(true);
+      expect(parsed.data.moduleId).toBe("starter-command-module");
+      expect(parsed.data.status).toBe("active");
+      expect(parsed.data.powerDrawKw).toBe(2);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick drains one battery from combined non-battery module power draw", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 3,
+              offline: 0,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-life-support",
+          blueprintId: "life-support",
+          displayName: "Life Support",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "damaged",
+            powerDrawKw: {
+              active: 5,
+              offline: 0.5,
+            },
+          },
+          capabilities: ["atmosphere-control"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 500,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "60"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Requested Ticks: 60");
+      expect(result.stdout).toContain("Completed Ticks: 60");
+      expect(result.stdout).toContain("Stopped Reason: completed");
+      expect(result.stdout).toContain("Total Power Draw: 3.5 kW");
+      expect(result.stdout).toContain("Energy Consumed: 0.058333 kWh");
+      expect(result.stdout).toContain("Battery Charge Before: 500 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 499.941667 kWh");
+
+      const battery = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-basic-battery",
+      ) as { runtimeAttributes: { currentEnergyKwh: number } };
+
+      expect(battery.runtimeAttributes.currentEnergyKwh).toBeCloseTo(499.9416666667, 10);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick stops at combined battery reserve and persists partial progress", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 3600,
+              offline: 0,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 65,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "10"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Requested Ticks: 10");
+      expect(result.stdout).toContain("Completed Ticks: 5");
+      expect(result.stdout).toContain("Stopped Reason: reserve_reached");
+      expect(result.stdout).toContain("Energy Consumed: 5 kWh");
+      expect(result.stdout).toContain("Battery Charge Before: 65 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 60 kWh");
+
+      const battery = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-basic-battery",
+      ) as { runtimeAttributes: { currentEnergyKwh: number } };
+
+      expect(battery.runtimeAttributes.currentEnergyKwh).toBe(60);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick combines multiple batteries and drains them in module order", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 1800,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "battery-a",
+          blueprintId: "basic-battery",
+          displayName: "Battery A",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 20,
+            energyStorageKwh: 20,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "battery-b",
+          blueprintId: "battery-bank",
+          displayName: "Battery B",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 30,
+            energyStorageKwh: 30,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "local",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "60"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Completed Ticks: 60");
+
+      const modules = readData().modules as Array<Record<string, unknown>>;
+      const firstBattery = modules.find((module) => module.id === "battery-a") as {
+        runtimeAttributes: { currentEnergyKwh: number };
+      };
+      const secondBattery = modules.find((module) => module.id === "battery-b") as {
+        runtimeAttributes: { currentEnergyKwh: number };
+      };
+
+      expect(firstBattery.runtimeAttributes.currentEnergyKwh).toBe(0);
+      expect(secondBattery.runtimeAttributes.currentEnergyKwh).toBe(20);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick falls back to offline draw for unknown statuses and ignores battery self-draw", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "unknown-status-module",
+          blueprintId: "life-support",
+          displayName: "Life Support",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "maintenance",
+            powerDrawKw: {
+              active: 4,
+              offline: 0.25,
+            },
+          },
+          capabilities: ["atmosphere-control"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            currentEnergyKwh: 10,
+            energyStorageKwh: 10,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              active: 9,
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "3600"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Total Power Draw: 0.25 kW");
+
+      const battery = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-basic-battery",
+      ) as { runtimeAttributes: { currentEnergyKwh: number } };
+
+      expect(battery.runtimeAttributes.currentEnergyKwh).toBeCloseTo(9.75, 10);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick fails clearly when no battery modules are available", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 2,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "60"], server);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("No battery modules are available for ticking.");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick rejects non-positive and non-integer counts", async () => {
+    const server = await startTestServer();
+
+    try {
+      const zeroResult = await runHabitat(["tick", "0"], server);
+      expect(zeroResult.exitCode).toBe(1);
+      expect(zeroResult.stderr).toContain("Tick count must be a non-zero integer.");
+
+      const decimalResult = await runHabitat(["tick", "1.5"], server);
+      expect(decimalResult.exitCode).toBe(1);
+      expect(decimalResult.stderr).toContain("Tick count must be a non-zero integer.");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick with a negative count recharges batteries using the same power draw rate", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 3,
+              offline: 0,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "-500"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Requested Ticks: -500");
+      expect(result.stdout).toContain("Completed Ticks: -500");
+      expect(result.stdout).toContain("Stopped Reason: completed");
+      expect(result.stdout).toContain("Total Power Draw: 3 kW");
+      expect(result.stdout).toContain("Energy Consumed: -0.416667 kWh");
+      expect(result.stdout).toContain("Battery Charge Before: 100 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 100.416667 kWh");
+
+      const battery = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-basic-battery",
+      ) as { runtimeAttributes: { currentEnergyKwh: number } };
+
+      expect(battery.runtimeAttributes.currentEnergyKwh).toBeCloseTo(100.4166666667, 10);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick with a negative count stops charging at combined battery capacity", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 3600,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "battery-a",
+          blueprintId: "basic-battery",
+          displayName: "Battery A",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 499,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "battery-b",
+          blueprintId: "battery-bank",
+          displayName: "Battery B",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 498,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "local",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "-10"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Requested Ticks: -10");
+      expect(result.stdout).toContain("Completed Ticks: -3");
+      expect(result.stdout).toContain("Stopped Reason: capacity_reached");
+      expect(result.stdout).toContain("Energy Consumed: -3 kWh");
+      expect(result.stdout).toContain("Battery Charge Before: 997 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 1000 kWh");
+
+      const modules = readData().modules as Array<Record<string, unknown>>;
+      const batteryA = modules.find((module) => module.id === "battery-a") as {
+        runtimeAttributes: { currentEnergyKwh: number };
+      };
+      const batteryB = modules.find((module) => module.id === "battery-b") as {
+        runtimeAttributes: { currentEnergyKwh: number };
+      };
+
+      expect(batteryA.runtimeAttributes.currentEnergyKwh).toBe(500);
+      expect(batteryB.runtimeAttributes.currentEnergyKwh).toBe(500);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick accepts hour shorthand and converts one hour to 1600 ticks", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 3,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 500,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1", "hour"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Requested Ticks: 1600");
+      expect(result.stdout).toContain("Completed Ticks: 1600");
+      expect(result.stdout).toContain("Energy Consumed: 1.333333 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 498.666667 kWh");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick accepts multi-hour shorthand and converts two hour to 3200 ticks", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 3,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 500,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "2", "hour"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Requested Ticks: 3200");
+      expect(result.stdout).toContain("Completed Ticks: 3200");
+      expect(result.stdout).toContain("Energy Consumed: 2.666667 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 497.333333 kWh");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick over-request in reverse still completes the final tick to full battery", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 9,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 499.9975,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "-4238905713895"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Completed Ticks: -1");
+      expect(result.stdout).toContain("Stopped Reason: capacity_reached");
+      expect(result.stdout).toContain("Energy Consumed: -0.0025 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 500 kWh");
+
+      const battery = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-basic-battery",
+      ) as { runtimeAttributes: { currentEnergyKwh: number } };
+
+      expect(battery.runtimeAttributes.currentEnergyKwh).toBe(500);
     } finally {
       server.close();
     }
