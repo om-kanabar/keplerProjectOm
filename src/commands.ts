@@ -191,6 +191,17 @@ export async function runCli(argv: string[]): Promise<void> {
     return "Try 'habitat --help' to see available commands.";
   }
 
+  function runModuleDetailsCommand(moduleId: string): void {
+    try {
+      const module = getModule(moduleId);
+      respond({ module }, () => {
+        printModuleDetails(module);
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : "Unable to read module.");
+    }
+  }
+
   function formatCommanderMessage(message: string): string {
     return message.replace(/^error: /, "");
   }
@@ -596,6 +607,9 @@ export async function runCli(argv: string[]): Promise<void> {
     .argument("[amount]", "amount to add")
     .action(async (resourceId: string, amount?: string) => {
       try {
+        requireOnlineBatteryForMutation();
+        requireOnlineSupplyCache();
+
         if (amount === undefined) {
           const result = await addResourcesForBlueprint(resourceId);
           respond({ inventory: result.inventory, blueprint: result.blueprint, requiredResources: result.requiredResources }, () => {
@@ -633,6 +647,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .argument("<amount>", "amount to add")
     .action((resourceId: string, amount: string) => {
       try {
+        requireOnlineBatteryForMutation();
         const inventory = addInventory(resourceId, parsePositiveInteger(amount, "Inventory amount"));
         respond({ inventory }, () => {
           console.log(`Added ${amount} ${resourceId}.`);
@@ -703,32 +718,11 @@ export async function runCli(argv: string[]): Promise<void> {
 
   moduleCommand
     .command("show")
+    .alias("info")
     .description("Show one local habitat module.")
     .argument("<moduleId>", "module id")
     .action((moduleId: string) => {
-      try {
-        const module = getModule(moduleId);
-        respond({ module }, () => {
-          printModuleDetails(module);
-        });
-      } catch (error) {
-        fail(error instanceof Error ? error.message : "Unable to read module.");
-      }
-    });
-
-  moduleCommand
-    .command("info")
-    .description("Show detailed information for one local habitat module.")
-    .argument("<moduleId>", "module id")
-    .action((moduleId: string) => {
-      try {
-        const module = getModule(moduleId);
-        respond({ module }, () => {
-          printModuleDetails(module);
-        });
-      } catch (error) {
-        fail(error instanceof Error ? error.message : "Unable to read module.");
-      }
+      runModuleDetailsCommand(moduleId);
     });
 
   moduleCommand
@@ -863,6 +857,7 @@ export async function runCli(argv: string[]): Promise<void> {
     )
     .action((ticks: string, unit?: string) => {
       try {
+        requireOnlineBatteryForMutation();
         const rechargeTicks =
           unit === "hour" || unit === "hours"
             ? parsePositiveInteger(ticks, "Recharge tick count") * 3600
@@ -896,12 +891,13 @@ export async function runCli(argv: string[]): Promise<void> {
         "",
       ].join("\n"),
     )
-    .action((count: string, unit?: string) => {
+    .action(async (count: string, unit?: string) => {
       try {
+        requireOnlineBatteryForMutation();
         const tick =
           unit === "hour" || unit === "hours"
-            ? runTickSimulation(parsePositiveInteger(count, "Tick count") * 3600)
-            : runTickSimulation(parsePositiveInteger(count, "Tick count"));
+            ? await runTickSimulation(parsePositiveInteger(count, "Tick count") * 3600)
+            : await runTickSimulation(parsePositiveInteger(count, "Tick count"));
         respond({ tick }, () => {
           printTickResult(tick);
         });
@@ -949,5 +945,38 @@ export async function runCli(argv: string[]): Promise<void> {
     }
 
     throw error;
+  }
+}
+
+function requireOnlineBatteryForMutation(): void {
+  const batteryModules = listModules().filter(
+    (module) => module.blueprintId === "basic-battery" || module.blueprintId === "battery-bank",
+  );
+
+  if (batteryModules.length === 0) {
+    return;
+  }
+
+  const hasOnlineBattery = batteryModules.some((module) => {
+    const status = module.runtimeAttributes.status;
+    return status === "online" || status === "active";
+  });
+
+  if (!hasOnlineBattery) {
+    throw new Error("At least one battery module must be online to perform this action.");
+  }
+}
+
+function requireOnlineSupplyCache(): void {
+  const supplyCache = listModules().find((module) => module.blueprintId === "supply-cache");
+
+  if (!supplyCache) {
+    throw new Error("Supply cache must be online to add resources.");
+  }
+
+  const status = supplyCache.runtimeAttributes.status;
+
+  if (status !== "online" && status !== "active") {
+    throw new Error("Supply cache must be online to add resources.");
   }
 }

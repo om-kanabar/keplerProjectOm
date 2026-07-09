@@ -1,16 +1,32 @@
 import { advanceConstructionTicks } from "./construction";
+import { fetchSolarIrradiance } from "./kepler";
 import { readData, writeData } from "./storage";
-import { BatteryRechargeResult, HabitatModule, RuntimeAttributes, TickSimulationResult } from "./types";
+import {
+  BatteryRechargeResult,
+  HabitatModule,
+  RuntimeAttributes,
+  SolarChargingReason,
+  SolarChargingResult,
+  TickSimulationResult,
+} from "./types";
 
 const BATTERY_BLUEPRINT_IDS = new Set(["basic-battery", "battery-bank"]);
+const SOLAR_EFFICIENCY = 0.5;
+const CLEAR_DAY_IRRADIANCE_W_PER_M2 = 900;
 const TICK_RATIO_EPSILON = 1e-9;
 
-export function runTickSimulation(requestedTicks: number): TickSimulationResult {
+type SolarEnvironment = {
+  irradianceWPerM2: number | null;
+  condition: string | null;
+};
+
+export async function runTickSimulation(requestedTicks: number): Promise<TickSimulationResult> {
   if (!Number.isInteger(requestedTicks) || requestedTicks <= 0) {
     throw new Error("Tick count must be a positive integer.");
   }
 
-  return runPowerFlowSimulation(requestedTicks, 1);
+  const solarEnvironment = await readSolarEnvironment();
+  return runPowerFlowSimulation(requestedTicks, 1, solarEnvironment);
 }
 
 export function runBatteryRechargeSimulation(requestedTicks: number): BatteryRechargeResult {
@@ -35,7 +51,11 @@ export function isBatteryModule(module: HabitatModule): boolean {
   return BATTERY_BLUEPRINT_IDS.has(module.blueprintId);
 }
 
-function runPowerFlowSimulation(requestedTicks: number, direction: 1 | -1): TickSimulationResult {
+function runPowerFlowSimulation(
+  requestedTicks: number,
+  direction: 1 | -1,
+  solarEnvironment?: SolarEnvironment,
+): TickSimulationResult {
   const data = readData();
   const modules = data.modules ?? [];
   const batteries = modules.filter(isBatteryModule);
@@ -46,13 +66,14 @@ function runPowerFlowSimulation(requestedTicks: number, direction: 1 | -1): Tick
 
   const totalPowerDrawKw = calculateTotalPowerDrawKw(modules);
   const batteryChargeBeforeKwh = sumBatteryMetric(batteries, "currentEnergyKwh");
-  const simulation = simulatePowerTicks(modules, requestedTicks, direction);
+  const simulation = simulatePowerTicks(modules, requestedTicks, direction, solarEnvironment);
   const completedTicks = simulation.completedTickCount * direction;
   const batteryChargeAfterKwh = sumBatteryMetric(
     simulation.modules.filter((module) => isBatteryModule(module)),
     "currentEnergyKwh",
   );
-  const actualEnergyConsumedKwh = batteryChargeBeforeKwh - batteryChargeAfterKwh;
+  const actualEnergyConsumedKwh =
+    direction > 0 ? simulation.totalLoadEnergyConsumedKwh : batteryChargeBeforeKwh - batteryChargeAfterKwh;
 
   writeData({
     ...data,
@@ -67,6 +88,10 @@ function runPowerFlowSimulation(requestedTicks: number, direction: 1 | -1): Tick
     energyConsumedKwh: actualEnergyConsumedKwh,
     batteryChargeBeforeKwh,
     batteryChargeAfterKwh,
+    solarCharging:
+      direction > 0
+        ? summarizeSolarCharging(simulation.solarEnergyAddedKwh, simulation.lastSolarReason, solarEnvironment)
+        : undefined,
     completedConstructionModuleIds: simulation.completedConstructionModuleIds,
   };
 }
@@ -111,15 +136,22 @@ function simulatePowerTicks(
   modules: HabitatModule[],
   requestedTicks: number,
   direction: 1 | -1,
+  solarEnvironment?: SolarEnvironment,
 ): {
   modules: HabitatModule[];
   completedTickCount: number;
+  totalLoadEnergyConsumedKwh: number;
   averagePowerDrawKw?: number;
+  solarEnergyAddedKwh: number;
+  lastSolarReason: SolarChargingReason;
   completedConstructionModuleIds: string[];
 } {
   let currentModules = modules;
   let completedTickCount = 0;
   let accumulatedPowerDrawKw = 0;
+  let totalLoadEnergyConsumedKwh = 0;
+  let solarEnergyAddedKwh = 0;
+  let lastSolarReason: SolarChargingReason = "no_solar_modules";
   const completedConstructionModuleIds: string[] = [];
 
   for (let index = 0; index < requestedTicks; index += 1) {
@@ -132,7 +164,16 @@ function simulatePowerTicks(
     }
 
     accumulatedPowerDrawKw += totalPowerDrawKw;
+    totalLoadEnergyConsumedKwh += energyPerTickKwh;
     currentModules = applyBatteryEnergyChange(currentModules, energyPerTickKwh * direction);
+
+    if (direction > 0) {
+      const solarCharging = applySolarChargingForCompletedTick(currentModules, solarEnvironment);
+      currentModules = solarCharging.modules;
+      solarEnergyAddedKwh += solarCharging.energyAddedKwh;
+      lastSolarReason = solarCharging.reason;
+    }
+
     completedTickCount += 1;
 
     if (direction > 0) {
@@ -150,8 +191,11 @@ function simulatePowerTicks(
   return {
     modules: currentModules,
     completedTickCount,
+    totalLoadEnergyConsumedKwh,
     averagePowerDrawKw:
       completedTickCount > 0 ? accumulatedPowerDrawKw / completedTickCount : undefined,
+    solarEnergyAddedKwh,
+    lastSolarReason,
     completedConstructionModuleIds,
   };
 }
@@ -253,6 +297,109 @@ function topOffBatteryEnergy(modules: HabitatModule[]): HabitatModule[] {
   });
 }
 
+function applySolarChargingForCompletedTick(
+  modules: HabitatModule[],
+  solarEnvironment?: SolarEnvironment,
+): { modules: HabitatModule[]; energyAddedKwh: number; reason: SolarChargingReason } {
+  const solarModules = modules.filter(isSolarModule);
+
+  if (solarModules.length === 0) {
+    return { modules, energyAddedKwh: 0, reason: "no_solar_modules" };
+  }
+
+  const onlineSolarModules = solarModules.filter(
+    (module) => isOperationalForSolar(module) && getModulePowerGenerationKw(module) > 0,
+  );
+
+  if (onlineSolarModules.length === 0) {
+    return { modules, energyAddedKwh: 0, reason: "solar_modules_offline" };
+  }
+
+  const batteries = modules.filter(isBatteryModule);
+  const onlineBatteries = batteries.filter(isOperationalForSolar);
+
+  if (onlineBatteries.length === 0) {
+    return { modules, energyAddedKwh: 0, reason: "battery_modules_offline" };
+  }
+
+  const availableCapacityKwh = onlineBatteries.reduce((sum, module) => {
+    const currentEnergyKwh = getRuntimeNumber(module.runtimeAttributes, "currentEnergyKwh");
+    const energyStorageKwh = getRuntimeNumber(module.runtimeAttributes, "energyStorageKwh");
+    return sum + Math.max(0, energyStorageKwh - currentEnergyKwh);
+  }, 0);
+
+  if (availableCapacityKwh <= TICK_RATIO_EPSILON) {
+    return { modules, energyAddedKwh: 0, reason: "battery_full" };
+  }
+
+  if (!solarEnvironment || solarEnvironment.irradianceWPerM2 === null || solarEnvironment.irradianceWPerM2 <= 0) {
+    return { modules, energyAddedKwh: 0, reason: "no_usable_irradiance" };
+  }
+
+  const totalPowerGenerationKw = onlineSolarModules.reduce((sum, module) => sum + getModulePowerGenerationKw(module), 0);
+  const solarMultiplier = solarEnvironment.irradianceWPerM2 / CLEAR_DAY_IRRADIANCE_W_PER_M2;
+  const generatedKwhPerTick = totalPowerGenerationKw * solarMultiplier * SOLAR_EFFICIENCY / 3600;
+
+  if (generatedKwhPerTick <= TICK_RATIO_EPSILON) {
+    return { modules, energyAddedKwh: 0, reason: "no_usable_irradiance" };
+  }
+
+  const appliedCharge = applySolarBatteryCharge(modules, generatedKwhPerTick);
+
+  return {
+    modules: appliedCharge.modules,
+    energyAddedKwh: appliedCharge.energyAddedKwh,
+    reason: appliedCharge.energyAddedKwh > TICK_RATIO_EPSILON ? "charged" : "battery_full",
+  };
+}
+
+function applySolarBatteryCharge(modules: HabitatModule[], generatedKwh: number): {
+  modules: HabitatModule[];
+  energyAddedKwh: number;
+} {
+  let remainingEnergyKwh = generatedKwh;
+  let appliedEnergyKwh = 0;
+
+  const nextModules = modules.map((module) => {
+    if (!isBatteryModule(module) || !isOperationalForSolar(module) || remainingEnergyKwh <= 0) {
+      return module;
+    }
+
+    const currentEnergyKwh = getRuntimeNumber(module.runtimeAttributes, "currentEnergyKwh");
+    const energyStorageKwh = getRuntimeNumber(module.runtimeAttributes, "energyStorageKwh");
+    const chargeRoomKwh = Math.max(0, energyStorageKwh - currentEnergyKwh);
+    const appliedToModuleKwh = Math.min(chargeRoomKwh, remainingEnergyKwh);
+    remainingEnergyKwh -= appliedToModuleKwh;
+    appliedEnergyKwh += appliedToModuleKwh;
+
+    return {
+      ...module,
+      runtimeAttributes: {
+        ...module.runtimeAttributes,
+        currentEnergyKwh: currentEnergyKwh + appliedToModuleKwh,
+      },
+    };
+  });
+
+  return {
+    modules: nextModules,
+    energyAddedKwh: appliedEnergyKwh,
+  };
+}
+
+function summarizeSolarCharging(
+  energyAddedKwh: number,
+  reason: SolarChargingReason,
+  solarEnvironment?: SolarEnvironment,
+): SolarChargingResult {
+  return {
+    reason: energyAddedKwh > TICK_RATIO_EPSILON ? "charged" : reason,
+    irradianceWPerM2: solarEnvironment?.irradianceWPerM2 ?? null,
+    condition: solarEnvironment?.condition ?? null,
+    energyAddedKwh,
+  };
+}
+
 function getStoppedReason(requestedTicks: number, completedTicks: number): TickSimulationResult["stoppedReason"] {
   if (requestedTicks === completedTicks) {
     return "completed";
@@ -271,6 +418,34 @@ function getRuntimeNumber(runtimeAttributes: RuntimeAttributes, key: string): nu
 
 function getFiniteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function isSolarModule(module: HabitatModule): boolean {
+  return module.capabilities.includes("power-generation") || getFiniteNumber(module.runtimeAttributes.powerGenerationKw) !== undefined;
+}
+
+function getModulePowerGenerationKw(module: HabitatModule): number {
+  return getFiniteNumber(module.runtimeAttributes.powerGenerationKw) ?? 0;
+}
+
+function isOperationalForSolar(module: HabitatModule): boolean {
+  const normalizedStatus = normalizeModuleStatus(
+    typeof module.runtimeAttributes.status === "string" ? module.runtimeAttributes.status : undefined,
+  );
+
+  return normalizedStatus === "online" || normalizedStatus === "active";
+}
+
+async function readSolarEnvironment(): Promise<SolarEnvironment> {
+  const response = await fetchSolarIrradiance();
+  const solarIrradiance =
+    response.solarIrradiance && typeof response.solarIrradiance === "object" && !Array.isArray(response.solarIrradiance)
+      ? (response.solarIrradiance as Record<string, unknown>)
+      : {};
+  return {
+    irradianceWPerM2: getFiniteNumber(solarIrradiance.wPerM2) ?? getFiniteNumber(solarIrradiance.wattsPerSquareMeter) ?? null,
+    condition: typeof solarIrradiance.condition === "string" ? solarIrradiance.condition : null,
+  };
 }
 
 function normalizeModuleStatus(status: string | undefined): string | undefined {

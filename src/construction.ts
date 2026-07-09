@@ -297,6 +297,10 @@ function hasUsablePower(modules: HabitatModule[]): boolean {
       return false;
     }
 
+    if (!isOperational(module)) {
+      return false;
+    }
+
     const current = getFiniteNumber(module.runtimeAttributes.currentEnergyKwh) ?? 0;
     const reserve = getFiniteNumber(module.runtimeAttributes.reserveKwh) ?? 0;
     return current > reserve;

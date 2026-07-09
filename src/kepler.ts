@@ -187,8 +187,7 @@ export async function unregisterFromKepler(): Promise<KeplerRegistration> {
 
   await requestKepler<void>("DELETE", `/habitats/${registration.habitatId}`);
 
-  const { keplerRegistration: _removed, ...remainingData } = data;
-  writeData(remainingData);
+  writeData({});
 
   return registration;
 }

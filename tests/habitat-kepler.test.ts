@@ -17,6 +17,11 @@ type TestServer = {
   close: () => void;
 };
 
+type TestServerOptions = {
+  solarIrradianceBody?: Record<string, unknown>;
+  solarIrradianceStatus?: number;
+};
+
 let workdir = "";
 
 const HABITAT_BIN = process.env.HABITAT_BIN ?? "/Users/Om/.bun/bin/habitat";
@@ -37,7 +42,7 @@ function writeData(data: Record<string, unknown>): void {
   writeFileSync(dataPath(), JSON.stringify(data, null, 2));
 }
 
-async function startTestServer(): Promise<TestServer> {
+async function startTestServer(options: TestServerOptions = {}): Promise<TestServer> {
   const requests: RecordedRequest[] = [];
   const port = await getFreePort();
   const blueprintCatalog = [
@@ -115,6 +120,7 @@ async function startTestServer(): Promise<TestServer> {
       runtimeAttributes: {
         status: "online",
         health: 100,
+        powerGenerationKw: 12,
       },
       capabilities: ["power-generation"],
     },
@@ -327,12 +333,17 @@ async function startTestServer(): Promise<TestServer> {
       }
 
       if (request.method === "GET" && url.pathname === "/world/solar-irradiance") {
-        return Response.json({
-          solarIrradiance: {
-            wattsPerSquareMeter: 590,
-            asOf: "2026-07-08T12:00:00.000Z",
+        return Response.json(
+          options.solarIrradianceBody ?? {
+            solarIrradiance: {
+              wPerM2: 900,
+              wattsPerSquareMeter: 900,
+              condition: "clear",
+              asOf: "2026-07-08T12:00:00.000Z",
+            },
           },
-        });
+          { status: options.solarIrradianceStatus ?? 200 },
+        );
       }
 
       if (request.method === "GET" && url.pathname === "/health") {
@@ -760,7 +771,7 @@ describe("Kepler habitat registration commands", () => {
         path: "/habitats/habitat-server-123",
       });
       expect(result.stdout).toContain('Unregistered habitat "Artemis Ridge".');
-      expect(readData().keplerRegistration).toBeUndefined();
+      expect(readData()).toEqual({});
     } finally {
       server.close();
     }
@@ -861,6 +872,41 @@ describe("Kepler habitat registration commands", () => {
       expect(result.stdout).toContain("| online   | 0.5    |");
       expect(result.stdout).toContain("| active   | 2      |");
       expect(result.stdout).toContain("| damaged  | 0.5    |");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module show surfaces power generation details for solar modules", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "solar-array-1",
+          blueprintId: "small-solar-array",
+          displayName: "Small Solar Array",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            health: 100,
+            powerGenerationKw: 12,
+          },
+          capabilities: ["power-generation"],
+          source: "local",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "show", "solar-array-1"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Power Generation: 12");
     } finally {
       server.close();
     }
@@ -1031,7 +1077,8 @@ describe("Kepler habitat registration commands", () => {
       ]);
       expect(healthResult.stdout).toContain("kepler-world");
       expect(versionResult.stdout).toContain("2026.07.08");
-      expect(irradianceResult.stdout).toContain("590");
+      expect(irradianceResult.stdout).toContain("900");
+      expect(irradianceResult.stdout).toContain("clear");
       expect(modulesResult.stdout).toContain("Workshop Fabricator");
       expect(siteTypesResult.stdout).toContain("Basalt Plain");
       expect(unlocksResult.stdout).toContain("Basic Fabrication");
@@ -1686,7 +1733,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 500,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -1813,7 +1860,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 500,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -1880,7 +1927,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 65,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -1945,7 +1992,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Battery A",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 20,
             energyStorageKwh: 20,
             reserveKwh: 0,
@@ -1960,7 +2007,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Battery B",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 30,
             energyStorageKwh: 30,
             reserveKwh: 0,
@@ -2091,6 +2138,478 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
+  test("tick fails clearly when all battery modules are offline", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 2,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "60"], server);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("At least one battery module must be online to perform this action.");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick charges an online battery from an online solar module using Kepler irradiance", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "solar-array-1",
+          blueprintId: "small-solar-array",
+          displayName: "Small Solar Array",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            powerGenerationKw: 12,
+          },
+          capabilities: ["power-generation"],
+          source: "local",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              online: 0,
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1", "--json"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(server.requests.map((request) => request.path)).toEqual(["/world/solar-irradiance"]);
+
+      const parsed = JSON.parse(result.stdout) as {
+        ok: true;
+        data: {
+          tick: {
+            solarCharging: {
+              reason: string;
+              irradianceWPerM2: number | null;
+              condition: string | null;
+              energyAddedKwh: number;
+            };
+          };
+        };
+      };
+
+      expect(parsed.ok).toBe(true);
+      expect(parsed.data.tick.solarCharging.reason).toBe("charged");
+      expect(parsed.data.tick.solarCharging.irradianceWPerM2).toBe(900);
+      expect(parsed.data.tick.solarCharging.condition).toBe("clear");
+      expect(parsed.data.tick.solarCharging.energyAddedKwh).toBeCloseTo(12 * 0.5 / 3600, 10);
+
+      const battery = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-basic-battery",
+      ) as { runtimeAttributes: { currentEnergyKwh: number } };
+
+      expect(battery.runtimeAttributes.currentEnergyKwh).toBeCloseTo(100 + (12 * 0.5 / 3600), 10);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick reports when no local solar modules exist", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              online: 0,
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1", "--json"], server);
+      expect(result.exitCode).toBe(0);
+
+      const parsed = JSON.parse(result.stdout) as {
+        ok: true;
+        data: { tick: { solarCharging: { reason: string; energyAddedKwh: number } } };
+      };
+
+      expect(parsed.data.tick.solarCharging.reason).toBe("no_solar_modules");
+      expect(parsed.data.tick.solarCharging.energyAddedKwh).toBe(0);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick reports when solar modules are present but offline", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "solar-array-1",
+          blueprintId: "small-solar-array",
+          displayName: "Small Solar Array",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "offline",
+            powerGenerationKw: 12,
+          },
+          capabilities: ["power-generation"],
+          source: "local",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              online: 0,
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1", "--json"], server);
+      expect(result.exitCode).toBe(0);
+
+      const parsed = JSON.parse(result.stdout) as {
+        ok: true;
+        data: { tick: { solarCharging: { reason: string; energyAddedKwh: number } } };
+      };
+
+      expect(parsed.data.tick.solarCharging.reason).toBe("solar_modules_offline");
+      expect(parsed.data.tick.solarCharging.energyAddedKwh).toBe(0);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick fails clearly when batteries are present but all offline", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "solar-array-1",
+          blueprintId: "small-solar-array",
+          displayName: "Small Solar Array",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            powerGenerationKw: 12,
+          },
+          capabilities: ["power-generation"],
+          source: "local",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              online: 0,
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1"], server);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("At least one battery module must be online to perform this action.");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick reports when irradiance is missing or unusable", async () => {
+    const server = await startTestServer({
+      solarIrradianceBody: {
+        solarIrradiance: {
+          condition: "night",
+        },
+      },
+    });
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "solar-array-1",
+          blueprintId: "small-solar-array",
+          displayName: "Small Solar Array",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            powerGenerationKw: 12,
+          },
+          capabilities: ["power-generation"],
+          source: "local",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              online: 0,
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1", "--json"], server);
+      expect(result.exitCode).toBe(0);
+
+      const parsed = JSON.parse(result.stdout) as {
+        ok: true;
+        data: { tick: { solarCharging: { reason: string; irradianceWPerM2: number | null; energyAddedKwh: number } } };
+      };
+
+      expect(parsed.data.tick.solarCharging.reason).toBe("no_usable_irradiance");
+      expect(parsed.data.tick.solarCharging.irradianceWPerM2).toBeNull();
+      expect(parsed.data.tick.solarCharging.energyAddedKwh).toBe(0);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick reports when online batteries are already full", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "solar-array-1",
+          blueprintId: "small-solar-array",
+          displayName: "Small Solar Array",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            powerGenerationKw: 12,
+          },
+          capabilities: ["power-generation"],
+          source: "local",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 500,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              online: 0,
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1", "--json"], server);
+      expect(result.exitCode).toBe(0);
+
+      const parsed = JSON.parse(result.stdout) as {
+        ok: true;
+        data: { tick: { solarCharging: { reason: string; energyAddedKwh: number } } };
+      };
+
+      expect(parsed.data.tick.solarCharging.reason).toBe("battery_full");
+      expect(parsed.data.tick.solarCharging.energyAddedKwh).toBe(0);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick fails clearly when the Kepler solar endpoint fails", async () => {
+    const server = await startTestServer({
+      solarIrradianceBody: {
+        error: {
+          message: "Solar weather feed is offline.",
+        },
+      },
+      solarIrradianceStatus: 503,
+    });
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "solar-array-1",
+          blueprintId: "small-solar-array",
+          displayName: "Small Solar Array",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            powerGenerationKw: 12,
+          },
+          capabilities: ["power-generation"],
+          source: "local",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              online: 0,
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1"], server);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Solar weather feed is offline.");
+    } finally {
+      server.close();
+    }
+  });
+
   test("tick rejects non-positive and non-integer counts", async () => {
     const server = await startTestServer();
 
@@ -2141,7 +2660,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 100,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -2196,7 +2715,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 100,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -2260,7 +2779,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Battery A",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 499,
             energyStorageKwh: 500,
             reserveKwh: 0,
@@ -2275,7 +2794,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Battery B",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 498,
             energyStorageKwh: 500,
             reserveKwh: 0,
@@ -2342,7 +2861,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 500,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -2396,7 +2915,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 500,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -2450,7 +2969,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 499.9975,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -2511,7 +3030,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 482.006389,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -2568,6 +3087,43 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
+  test("inventory add fails clearly when all battery modules are offline", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const addResult = await runHabitat(["inventory", "add", "ferrite", "90"], server);
+      expect(addResult.exitCode).toBe(1);
+      expect(addResult.stderr).toContain("At least one battery module must be online to perform this action.");
+      expect(readData().inventory).toBeUndefined();
+    } finally {
+      server.close();
+    }
+  });
+
   test("resource add validates the live catalog and updates resource list amounts", async () => {
     const server = await startTestServer();
     writeData({
@@ -2576,6 +3132,34 @@ describe("Kepler habitat registration commands", () => {
         habitatId: "habitat-server-123",
         displayName: "Artemis Ridge",
       },
+      modules: [
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+      ],
     });
 
     try {
@@ -2598,6 +3182,58 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
+  test("resource add fails clearly when the supply cache is offline", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "offline",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const addResult = await runHabitat(["resource", "add", "silicate-glass", "45"], server);
+      expect(addResult.exitCode).toBe(1);
+      expect(addResult.stderr).toContain("Supply cache must be online to add resources.");
+
+      const blueprintResult = await runHabitat(["resource", "add", "small-solar-array"], server);
+      expect(blueprintResult.exitCode).toBe(1);
+      expect(blueprintResult.stderr).toContain("Supply cache must be online to add resources.");
+      expect(readData().inventory).toBeUndefined();
+    } finally {
+      server.close();
+    }
+  });
+
   test("resource add accepts a blueprint id and adds all required materials", async () => {
     const server = await startTestServer();
     writeData({
@@ -2606,6 +3242,34 @@ describe("Kepler habitat registration commands", () => {
         habitatId: "habitat-server-123",
         displayName: "Artemis Ridge",
       },
+      modules: [
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 100,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+      ],
     });
 
     try {
@@ -2658,7 +3322,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 400,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -2744,7 +3408,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 400,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -2931,7 +3595,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 400,
             energyStorageKwh: 500,
             reserveKwh: 60,
@@ -3024,7 +3688,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 10,
             energyStorageKwh: 10,
             reserveKwh: 0,
@@ -3140,7 +3804,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Battery",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "offline",
+            status: "online",
             currentEnergyKwh: 60,
             energyStorageKwh: 500,
             reserveKwh: 60,

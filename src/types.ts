@@ -49,6 +49,21 @@ export type ConstructionJob = {
 
 export type TickStoppedReason = "completed" | "reserve_reached" | "capacity_reached";
 
+export type SolarChargingReason =
+  | "charged"
+  | "no_usable_irradiance"
+  | "no_solar_modules"
+  | "solar_modules_offline"
+  | "battery_modules_offline"
+  | "battery_full";
+
+export type SolarChargingResult = {
+  reason: SolarChargingReason;
+  irradianceWPerM2: number | null;
+  condition: string | null;
+  energyAddedKwh: number;
+};
+
 export type TickSimulationResult = {
   requestedTicks: number;
   completedTicks: number;
@@ -57,6 +72,7 @@ export type TickSimulationResult = {
   energyConsumedKwh: number;
   batteryChargeBeforeKwh: number;
   batteryChargeAfterKwh: number;
+  solarCharging?: SolarChargingResult;
   completedConstructionModuleIds?: string[];
 };
 

@@ -222,6 +222,13 @@ export function printTickResult(result: TickSimulationResult): void {
   console.log(`  Battery Charge Before: ${formatUnitValue(result.batteryChargeBeforeKwh, "kWh")}`);
   console.log(`  Battery Charge After: ${formatUnitValue(result.batteryChargeAfterKwh, "kWh")}`);
 
+  if (result.solarCharging) {
+    console.log(`  Solar Irradiance: ${formatSolarIrradiance(result.solarCharging.irradianceWPerM2)}`);
+    console.log(`  Solar Condition: ${result.solarCharging.condition ?? "(unknown)"}`);
+    console.log(`  Solar Charge Added: ${formatUnitValue(result.solarCharging.energyAddedKwh, "kWh")}`);
+    console.log(`  Solar Status: ${formatSolarChargingReason(result.solarCharging.reason)}`);
+  }
+
   if ((result.completedConstructionModuleIds ?? []).length > 0) {
     console.log("  Completed Construction");
     for (const moduleId of result.completedConstructionModuleIds ?? []) {
@@ -377,6 +384,12 @@ function getBlueprintSpecificProperties(module: HabitatModule): Array<{ label: s
       createProperty("Capacity", module.runtimeAttributes.energyStorageKwh),
       createProperty("Reserve", module.runtimeAttributes.reserveKwh),
       createProperty("Max Power Output", module.runtimeAttributes.maxPowerOutputKw),
+    ];
+  }
+
+  if (module.capabilities.includes("power-generation")) {
+    return [
+      createProperty("Power Generation", module.runtimeAttributes.powerGenerationKw),
     ];
   }
 
@@ -538,6 +551,33 @@ function formatModuleStatusValue(value: unknown): string {
   }
 
   return status;
+}
+
+function formatSolarIrradiance(value: number | null): string {
+  if (value === null) {
+    return "(unavailable)";
+  }
+
+  return `${formatDecimal(value)} W/m^2`;
+}
+
+function formatSolarChargingReason(reason: string): string {
+  switch (reason) {
+    case "charged":
+      return "charged battery modules";
+    case "no_usable_irradiance":
+      return "no usable Kepler sunlight reading";
+    case "no_solar_modules":
+      return "no local solar modules";
+    case "solar_modules_offline":
+      return "solar modules are offline";
+    case "battery_modules_offline":
+      return "battery modules are offline";
+    case "battery_full":
+      return "battery modules are already full";
+    default:
+      return reason;
+  }
 }
 
 function formatYesNo(value: boolean): string {
