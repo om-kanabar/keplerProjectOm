@@ -1,4 +1,5 @@
 export type RuntimeAttributes = Record<string, unknown>;
+export type InventoryRecord = Record<string, number>;
 
 export type BlueprintReference = {
   id?: string;
@@ -15,10 +16,12 @@ export type BlueprintReference = {
 export type ResourceReference = {
   id?: string;
   resourceId: string;
+  resourceType?: string;
   displayName: string;
   name?: string;
   description?: string;
   status?: string;
+  rarity?: string;
   output?: Record<string, unknown>;
   inputs?: Record<string, unknown>;
 } & Record<string, unknown>;
@@ -36,6 +39,14 @@ export type HabitatModule = StarterModulePayload & {
   source: "starter" | "local";
 };
 
+export type ConstructionJob = {
+  blueprintId: string;
+  outputModuleId: string;
+  buildTicks: number;
+  remainingTicks: number;
+  futureModule: HabitatModule;
+};
+
 export type TickStoppedReason = "completed" | "reserve_reached" | "capacity_reached";
 
 export type TickSimulationResult = {
@@ -46,6 +57,7 @@ export type TickSimulationResult = {
   energyConsumedKwh: number;
   batteryChargeBeforeKwh: number;
   batteryChargeAfterKwh: number;
+  completedConstructionModuleIds?: string[];
 };
 
 export type BatteryRechargeResult = {
@@ -72,4 +84,5 @@ export type KeplerRegistration = {
 export type HabitatData = Record<string, unknown> & {
   keplerRegistration?: KeplerRegistration;
   modules?: HabitatModule[];
+  inventory?: InventoryRecord;
 };

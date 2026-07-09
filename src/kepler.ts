@@ -20,6 +20,18 @@ type HabitatResponse = {
   };
 };
 
+type HabitatRegistrationLookupResponse =
+  | HabitatResponse
+  | {
+      id?: string;
+      habitatId?: string;
+      habitatSlug?: string;
+      displayName?: string;
+      catalogVersion?: string;
+      status?: string;
+      lastSeenAt?: string | null;
+    };
+
 type BlueprintCatalogResponse = {
   blueprints: BlueprintReference[];
 } | BlueprintReference[];
@@ -27,6 +39,8 @@ type BlueprintCatalogResponse = {
 type ResourceCatalogResponse = {
   resources: ResourceReference[];
 } | ResourceReference[];
+
+type GenericCatalogResponse = Record<string, unknown> | Array<Record<string, unknown>>;
 
 const DEFAULT_BASE_URL = "https://planet.turingguild.com";
 
@@ -95,16 +109,19 @@ async function readErrorMessage(response: Response): Promise<string> {
 
 function updateRegistrationFromHabitat(
   registration: KeplerRegistration,
-  response: HabitatResponse,
+  response: HabitatRegistrationLookupResponse,
 ): KeplerRegistration {
+  const habitat = "habitat" in response ? response.habitat : response;
+  const habitatId = "habitatId" in habitat ? habitat.habitatId : undefined;
+
   return {
     ...registration,
-    habitatId: response.habitat.id,
-    displayName: response.habitat.displayName,
-    habitatSlug: response.habitat.habitatSlug,
-    catalogVersion: response.habitat.catalogVersion,
-    status: response.habitat.status,
-    lastSeenAt: response.habitat.lastSeenAt ?? null,
+    habitatId: habitat.id ?? habitatId ?? registration.habitatId,
+    displayName: habitat.displayName ?? registration.displayName,
+    habitatSlug: habitat.habitatSlug,
+    catalogVersion: habitat.catalogVersion,
+    status: habitat.status,
+    lastSeenAt: habitat.lastSeenAt ?? null,
   };
 }
 
@@ -146,7 +163,10 @@ export async function fetchKeplerRegistration(): Promise<KeplerRegistration | un
     return undefined;
   }
 
-  const response = await requestKepler<HabitatResponse>("GET", `/habitats/${registration.habitatId}`);
+  const response = await requestKepler<HabitatRegistrationLookupResponse>(
+    "GET",
+    `/habitats/${registration.habitatId}/registration`,
+  );
   const updated = updateRegistrationFromHabitat(registration, response);
 
   writeData({
@@ -185,10 +205,123 @@ export async function fetchKeplerBlueprintCatalog(): Promise<BlueprintReference[
 
 export async function fetchKeplerResourceCatalog(): Promise<ResourceReference[]> {
   const response = await requestKepler<ResourceCatalogResponse>("GET", "/catalog/resources");
+  const resources = Array.isArray(response) ? response : response.resources ?? [];
+
+  return resources
+    .map(normalizeResourceReference)
+    .filter((resource): resource is ResourceReference => resource !== undefined);
+}
+
+function normalizeResourceReference(resource: ResourceReference): ResourceReference | undefined {
+  const resourceId =
+    resource.resourceId ??
+    (typeof resource.resourceType === "string" ? resource.resourceType : undefined) ??
+    (typeof resource.id === "string" ? resource.id : undefined);
+
+  const displayName =
+    resource.displayName ??
+    (typeof resource.name === "string" ? resource.name : undefined) ??
+    resourceId;
+
+  if (!resourceId || !displayName) {
+    return undefined;
+  }
+
+  return {
+    ...resource,
+    resourceId,
+    displayName,
+    status: resource.status ?? resource.rarity,
+  };
+}
+
+export async function fetchKeplerHealth(): Promise<Record<string, unknown>> {
+  return requestKepler<Record<string, unknown>>("GET", "/health");
+}
+
+export async function fetchKeplerVersion(): Promise<Record<string, unknown>> {
+  return requestKepler<Record<string, unknown>>("GET", "/version");
+}
+
+export async function fetchSolarIrradiance(): Promise<Record<string, unknown>> {
+  return requestKepler<Record<string, unknown>>("GET", "/world/solar-irradiance");
+}
+
+export async function fetchKeplerModuleCatalog(): Promise<Record<string, unknown>[]> {
+  return fetchGenericCatalog("/catalog/modules", "modules");
+}
+
+export async function fetchKeplerSiteTypeCatalog(): Promise<Record<string, unknown>[]> {
+  return fetchGenericCatalog("/catalog/site-types", "siteTypes");
+}
+
+export async function fetchKeplerUnlockCatalog(): Promise<Record<string, unknown>[]> {
+  return fetchGenericCatalog("/catalog/unlocks", "unlocks");
+}
+
+export async function sendHabitatHeartbeat(): Promise<Record<string, unknown>> {
+  return requestKepler<Record<string, unknown>>(
+    "POST",
+    `/habitats/${requireRegisteredHabitat().habitatId}/heartbeat`,
+    buildHabitatReportPayload(),
+  );
+}
+
+export async function sendHabitatSummary(): Promise<Record<string, unknown>> {
+  return requestKepler<Record<string, unknown>>(
+    "POST",
+    `/habitats/${requireRegisteredHabitat().habitatId}/summary`,
+    buildHabitatReportPayload(),
+  );
+}
+
+export async function reportHabitatUnlocks(): Promise<Record<string, unknown>> {
+  return requestKepler<Record<string, unknown>>(
+    "POST",
+    `/habitats/${requireRegisteredHabitat().habitatId}/unlocks/report`,
+    buildHabitatReportPayload(),
+  );
+}
+
+function requireRegisteredHabitat(): KeplerRegistration {
+  const registration = readData().keplerRegistration;
+
+  if (!registration?.habitatId) {
+    throw new Error("Habitat is not registered with Kepler.");
+  }
+
+  return registration;
+}
+
+function buildHabitatReportPayload(): Record<string, unknown> {
+  const data = readData();
+  const registration = requireRegisteredHabitat();
+  const modules = data.modules ?? [];
+
+  return {
+    habitatId: registration.habitatId,
+    habitatUuid: registration.habitatUuid,
+    displayName: registration.displayName,
+    moduleCount: modules.length,
+    modules,
+    inventory: data.inventory ?? {},
+    capabilities: [...new Set(modules.flatMap((module) => module.capabilities))],
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+async function fetchGenericCatalog(path: string, key: string): Promise<Record<string, unknown>[]> {
+  const response = await requestKepler<GenericCatalogResponse>("GET", path);
 
   if (Array.isArray(response)) {
     return response;
   }
 
-  return response.resources ?? [];
+  const entries = response[key];
+
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries.filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === "object");
 }

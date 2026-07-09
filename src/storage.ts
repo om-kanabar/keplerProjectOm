@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HabitatData, HabitatModule, KeplerRegistration } from "./types";
+import { HabitatData, HabitatModule, InventoryRecord, KeplerRegistration } from "./types";
 
 const DATA_FILE_NAME = ".habitat-data.json";
 const MODULES_FILE_NAME = "habitat-modules.json";
@@ -23,6 +23,7 @@ export function readData(): HabitatData {
   return {
     ...parsed,
     keplerRegistration: parseKeplerRegistration(parsed.keplerRegistration),
+    inventory: parseInventory(parsed.inventory),
     modules: parseModules(parsed.modules),
   };
 }
@@ -67,4 +68,21 @@ function parseModules(value: unknown): HabitatModule[] | undefined {
       (module.source === "starter" || module.source === "local")
     );
   });
+}
+
+function parseInventory(value: unknown): InventoryRecord | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(value).filter(
+    ([resourceId, amount]) =>
+      resourceId.length > 0 && typeof amount === "number" && Number.isFinite(amount) && amount >= 0,
+  );
+
+  if (entries.length === 0) {
+    return {};
+  }
+
+  return Object.fromEntries(entries);
 }

@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { getBlueprint } from "./blueprints";
 import { readData, writeData } from "./storage";
-import { HabitatData, HabitatModule, RuntimeAttributes, StarterModulePayload } from "./types";
+import { BlueprintReference, HabitatData, HabitatModule, RuntimeAttributes, StarterModulePayload } from "./types";
 
-export const VALID_MODULE_STATUSES = ["offline", "idle", "active", "damaged"] as const;
+export const VALID_MODULE_STATUSES = ["offline", "online", "active", "damaged"] as const;
 
 type CreateModuleInput = {
   blueprintId: string;
@@ -50,14 +50,21 @@ export function getModule(moduleId: string): HabitatModule {
 
 export async function createModule(input: CreateModuleInput): Promise<HabitatModule> {
   const data = readData();
-  await getBlueprint(input.blueprintId);
+  const blueprint = await getBlueprint(input.blueprintId);
+  ensureModuleNameAvailable(data.modules ?? [], input.displayName);
   const module: HabitatModule = {
     id: randomUUID(),
     blueprintId: input.blueprintId,
     displayName: input.displayName,
     connectedTo: resolveModuleIds(data.modules ?? [], uniqueStrings(input.connectedTo ?? [])),
-    capabilities: uniqueStrings(input.capabilities ?? []),
-    runtimeAttributes: { ...(input.runtimeAttributes ?? {}) },
+    capabilities: uniqueStrings([
+      ...getBlueprintCapabilities(blueprint),
+      ...(input.capabilities ?? []),
+    ]),
+    runtimeAttributes: {
+      ...getBlueprintRuntimeAttributes(blueprint),
+      ...(input.runtimeAttributes ?? {}),
+    },
     source: "local",
   };
 
@@ -74,8 +81,11 @@ export function updateModule(moduleId: string, input: UpdateModuleInput): Habita
   const modules = data.modules ?? [];
   const resolvedModule = requireModule(modules, moduleId);
   const index = modules.findIndex((entry) => entry.id === resolvedModule.id);
-
   const current = modules[index];
+  const displayName = input.displayName ?? current.displayName;
+
+  ensureModuleNameAvailable(modules, displayName, current.id);
+
   const runtimeAttributes =
     input.runtimeAttributes === undefined
       ? { ...current.runtimeAttributes }
@@ -91,7 +101,7 @@ export function updateModule(moduleId: string, input: UpdateModuleInput): Habita
 
   const updated: HabitatModule = {
     ...current,
-    displayName: input.displayName ?? current.displayName,
+    displayName,
     connectedTo: applyConnections(
       modules,
       current.connectedTo,
@@ -193,10 +203,21 @@ function requireModule(modules: HabitatModule[], moduleId: string): HabitatModul
 function findModule(modules: HabitatModule[], moduleId: string): HabitatModule | undefined {
   return (
     modules.find((entry) => entry.id === moduleId) ??
+    findModuleByDisplayName(modules, moduleId) ??
     findModuleByShortcut(modules, moduleId) ??
     findModuleByBlueprintAlias(modules, moduleId) ??
     findModuleByBlueprintOrdinalAlias(modules, moduleId)
   );
+}
+
+function findModuleByDisplayName(modules: HabitatModule[], moduleId: string): HabitatModule | undefined {
+  const matches = modules.filter((entry) => entry.displayName === moduleId);
+
+  if (matches.length > 1) {
+    throw new Error(`Module name "${moduleId}" is ambiguous. Use the full module id.`);
+  }
+
+  return matches[0];
 }
 
 function findModuleByShortcut(modules: HabitatModule[], moduleId: string): HabitatModule | undefined {
@@ -241,4 +262,28 @@ function validateModuleStatus(status: string): void {
   if (!VALID_MODULE_STATUSES.includes(status as (typeof VALID_MODULE_STATUSES)[number])) {
     throw new Error(`Status must be one of: ${VALID_MODULE_STATUSES.join(", ")}.`);
   }
+}
+
+function ensureModuleNameAvailable(modules: HabitatModule[], displayName: string, moduleId?: string): void {
+  const matches = modules.filter(
+    (module) => module.displayName === displayName && (moduleId === undefined || module.id !== moduleId),
+  );
+
+  if (matches.length === 0) {
+    return;
+  }
+
+  throw new Error(`Module name "${displayName}" is already in use.`);
+}
+
+function getBlueprintCapabilities(blueprint: BlueprintReference): string[] {
+  return Array.isArray(blueprint.capabilities)
+    ? blueprint.capabilities.filter((capability): capability is string => typeof capability === "string")
+    : [];
+}
+
+function getBlueprintRuntimeAttributes(blueprint: BlueprintReference): RuntimeAttributes {
+  return blueprint.runtimeAttributes && typeof blueprint.runtimeAttributes === "object"
+    ? { ...(blueprint.runtimeAttributes as RuntimeAttributes) }
+    : {};
 }

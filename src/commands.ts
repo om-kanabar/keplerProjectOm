@@ -1,19 +1,41 @@
 import { Command } from "commander";
 import { getBlueprint, listBlueprints } from "./blueprints";
-import { fetchKeplerRegistration, registerWithKepler, unregisterFromKepler } from "./kepler";
-import { createModule, deleteModule, getModule, listModules, setModuleStatus, updateModule } from "./modules";
-import { listResources } from "./resources";
+import { cancelConstruction, inspectConstructionReadiness, listConstructionJobs, startConstruction } from "./construction";
+import { addInventory, listInventory } from "./inventory";
+import {
+  fetchKeplerHealth,
+  fetchKeplerModuleCatalog,
+  fetchKeplerRegistration,
+  fetchKeplerSiteTypeCatalog,
+  fetchKeplerUnlockCatalog,
+  fetchKeplerVersion,
+  fetchSolarIrradiance,
+  registerWithKepler,
+  reportHabitatUnlocks,
+  sendHabitatHeartbeat,
+  sendHabitatSummary,
+  unregisterFromKepler,
+} from "./kepler";
+import { deleteModule, getModule, listModules, setModuleStatus, updateModule } from "./modules";
+import { addResource, addResourcesForBlueprint, listResources, listResourcesWithInventory } from "./resources";
 import { runBatteryRechargeSimulation, runTickSimulation } from "./tick";
 import packageJson from "../package.json";
 import {
   printBatteryRechargeResult,
   printBlueprintDetails,
   printBlueprintList,
+  printConstructionCanceled,
+  printConstructionDryRun,
+  printConstructionStarted,
+  printConstructionStatus,
+  printInventoryList,
   printKeplerRegistration,
   printModuleDetails,
   printModuleList,
   printModuleStatus,
   printResourceList,
+  printServerCollection,
+  printServerRecord,
   printStatusChangeConfirmation,
   printTickResult,
 } from "./output";
@@ -106,13 +128,6 @@ export async function runCli(argv: string[]): Promise<void> {
       );
     }
 
-    if (args[0] === "module" && args[1] === "create") {
-      return [
-        'Usage: habitat module create --blueprint <blueprintId> --name "<display name>"',
-        'Example: habitat module create --blueprint storage-module --name "Cargo Annex"',
-      ].join("\n");
-    }
-
     if (args[0] === "blueprint" && args[1] === "list") {
       return ["Usage: habitat blueprint list", "Example: habitat blueprint list"].join("\n");
     }
@@ -126,6 +141,44 @@ export async function runCli(argv: string[]): Promise<void> {
 
     if (args[0] === "resource" && args[1] === "list") {
       return ["Usage: habitat resource list", "Example: habitat resource list"].join("\n");
+    }
+
+    if (args[0] === "resource" && args[1] === "add") {
+      return [
+        "Usage: habitat resource add <resourceId> <amount>",
+        "Usage: habitat resource add <blueprintId>",
+        "Example: habitat resource add ferrite 90",
+        "Example: habitat resource add small-solar-array",
+      ].join("\n");
+    }
+
+    if (args[0] === "inventory" && args[1] === "list") {
+      return ["Usage: habitat inventory list", "Example: habitat inventory list"].join("\n");
+    }
+
+    if (args[0] === "inventory" && args[1] === "add") {
+      return ["Usage: habitat inventory add <resourceId> <amount>", "Example: habitat inventory add ferrite 90"].join(
+        "\n",
+      );
+    }
+
+    if (args[0] === "construct") {
+      return [
+        "Usage: habitat construct <blueprintId>",
+        "Usage: habitat construct <blueprintId> --dry-run",
+        "Example: habitat construct small-solar-array --dry-run",
+      ].join("\n");
+    }
+
+    if (args[0] === "construction" && args[1] === "status") {
+      return ["Usage: habitat construction status", "Example: habitat construction status"].join("\n");
+    }
+
+    if (args[0] === "construction" && args[1] === "cancel") {
+      return [
+        "Usage: habitat construction cancel <moduleId>",
+        "Example: habitat construction cancel workshop-fabricator-1",
+      ].join("\n");
     }
 
     if (args[0] === "module" && args[1] === "update") {
@@ -228,10 +281,6 @@ export async function runCli(argv: string[]): Promise<void> {
   }
 
   function normalizeArgs(args: string[]): string[] {
-    if (args.length >= 5 && args[2] === "tick") {
-      return normalizeTickArgs(args);
-    }
-
     if (args.length >= 5 && args[2] === "module" && args[4] === "status") {
       return [args[0], args[1], "module", "status", args[3]];
     }
@@ -245,22 +294,6 @@ export async function runCli(argv: string[]): Promise<void> {
 
   function stripJsonArgs(args: string[]): string[] {
     return args.filter((arg) => arg !== "--json");
-  }
-
-  function normalizeTickArgs(args: string[]): string[] {
-    const unit = args[4];
-
-    if (unit !== "hour" && unit !== "hours") {
-      return args;
-    }
-
-    const tickCount = Number(args[3]);
-
-    if (!Number.isFinite(tickCount)) {
-      return args;
-    }
-
-    return [args[0], args[1], "tick", String(tickCount * 3600)];
   }
 
   const program = new Command();
@@ -326,7 +359,7 @@ export async function runCli(argv: string[]): Promise<void> {
 
   program
     .command("status")
-    .description("Show Kepler registration status and local modules.")
+    .description("Show live Kepler registration status and local simulation modules.")
     .action(async () => {
       try {
         const registration = await fetchKeplerRegistration();
@@ -339,10 +372,127 @@ export async function runCli(argv: string[]): Promise<void> {
       }
     });
 
-  const moduleCommand = program.command("module").description("Manage local habitat modules.");
+  const moduleCommand = program.command("module").description("Manage local habitat simulation modules.");
   const blueprintCommand = program.command("blueprint").description("Inspect the Kepler blueprint catalog.");
+  const catalogCommand = program.command("catalog").description("Inspect Kepler-owned catalogs.");
+  const constructionCommand = program.command("construction").description("Inspect and manage local construction jobs.");
+  const inventoryCommand = program.command("inventory").description("Inspect and manage local inventory.");
   const resourceCommand = program.command("resource").description("Inspect the Kepler resource catalog.");
+  const unlocksCommand = program.command("unlocks").description("Report local unlock-relevant state to Kepler.");
+  const worldCommand = program.command("world").description("Inspect Kepler world state.");
   const batteryCommand = moduleCommand.command("battery").description("Recharge module batteries.");
+
+  program
+    .command("health")
+    .description("Check the Kepler server health endpoint.")
+    .action(async () => {
+      try {
+        const health = await fetchKeplerHealth();
+        respond({ health }, () => {
+          printServerRecord("Kepler Health", health);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read Kepler health.");
+      }
+    });
+
+  program
+    .command("version")
+    .description("Show the Kepler server version.")
+    .action(async () => {
+      try {
+        const version = await fetchKeplerVersion();
+        respond({ version }, () => {
+          printServerRecord("Kepler Version", version);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read Kepler version.");
+      }
+    });
+
+  worldCommand
+    .command("solar-irradiance")
+    .description("Show the current Kepler world solar irradiance.")
+    .action(async () => {
+      try {
+        const solarIrradiance = await fetchSolarIrradiance();
+        respond({ solarIrradiance }, () => {
+          printServerRecord("Solar Irradiance", solarIrradiance);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read Kepler solar irradiance.");
+      }
+    });
+
+  catalogCommand
+    .command("modules")
+    .description("List the live Kepler module catalog.")
+    .action(async () => {
+      try {
+        const modules = await fetchKeplerModuleCatalog();
+        respond({ modules }, () => {
+          printServerCollection("Catalog Modules", modules, ["displayName", "moduleType", "status", "id"]);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read the module catalog.");
+      }
+    });
+
+  catalogCommand
+    .command("resources")
+    .description("List the live Kepler resource catalog.")
+    .action(async () => {
+      try {
+        const resources = await listResources();
+        respond({ resources }, () => {
+          printResourceList(resources);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read the resource catalog.");
+      }
+    });
+
+  catalogCommand
+    .command("blueprints")
+    .description("List the live Kepler blueprint catalog.")
+    .action(async () => {
+      try {
+        const blueprints = await listBlueprints();
+        respond({ blueprints }, () => {
+          printBlueprintList(blueprints);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read the blueprint catalog.");
+      }
+    });
+
+  catalogCommand
+    .command("site-types")
+    .description("List the live Kepler site type catalog.")
+    .action(async () => {
+      try {
+        const siteTypes = await fetchKeplerSiteTypeCatalog();
+        respond({ siteTypes }, () => {
+          printServerCollection("Catalog Site Types", siteTypes, ["displayName", "siteType", "status", "id"]);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read the site type catalog.");
+      }
+    });
+
+  catalogCommand
+    .command("unlocks")
+    .description("List the live Kepler unlock catalog.")
+    .action(async () => {
+      try {
+        const unlocks = await fetchKeplerUnlockCatalog();
+        respond({ unlocks }, () => {
+          printServerCollection("Catalog Unlocks", unlocks, ["displayName", "unlockId", "status", "id"]);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read the unlock catalog.");
+      }
+    });
 
   moduleCommand
     .command("list")
@@ -385,15 +535,169 @@ export async function runCli(argv: string[]): Promise<void> {
 
   resourceCommand
     .command("list")
-    .description("List the live Kepler resource catalog.")
+    .description("List the live Kepler resource catalog with local amounts.")
     .action(async () => {
       try {
-        const resources = await listResources();
+        const resources = await listResourcesWithInventory();
         respond({ resources }, () => {
           printResourceList(resources);
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "Unable to read the resource catalog.");
+      }
+    });
+
+  program
+    .command("heartbeat")
+    .description("Report the current local habitat heartbeat to Kepler.")
+    .action(async () => {
+      try {
+        const heartbeat = await sendHabitatHeartbeat();
+        respond({ heartbeat }, () => {
+          printServerRecord("Heartbeat Response", heartbeat);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to send habitat heartbeat.");
+      }
+    });
+
+  program
+    .command("summary")
+    .description("Report the current local habitat summary to Kepler.")
+    .action(async () => {
+      try {
+        const summary = await sendHabitatSummary();
+        respond({ summary }, () => {
+          printServerRecord("Summary Response", summary);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to send habitat summary.");
+      }
+    });
+
+  unlocksCommand
+    .command("report")
+    .description("Report local unlock-relevant state to Kepler.")
+    .action(async () => {
+      try {
+        const report = await reportHabitatUnlocks();
+        respond({ report }, () => {
+          printServerRecord("Unlock Report Response", report);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to report habitat unlocks.");
+      }
+    });
+
+  resourceCommand
+    .command("add")
+    .description("Add a local amount for a resource that exists in the live Kepler catalog.")
+    .argument("<resourceId>", "resource id")
+    .argument("[amount]", "amount to add")
+    .action(async (resourceId: string, amount?: string) => {
+      try {
+        if (amount === undefined) {
+          const result = await addResourcesForBlueprint(resourceId);
+          respond({ inventory: result.inventory, blueprint: result.blueprint, requiredResources: result.requiredResources }, () => {
+            console.log(`Added required resources for "${result.blueprint.blueprintId}".`);
+            for (const [requiredResourceId, requiredAmount] of Object.entries(result.requiredResources)) {
+              console.log(`${requiredResourceId}: ${requiredAmount}`);
+            }
+          });
+          return;
+        }
+
+        const inventory = await addResource(resourceId, parsePositiveInteger(amount, "Resource amount"));
+        respond({ inventory }, () => {
+          console.log(`Added ${amount} ${resourceId}.`);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to add resource.");
+      }
+    });
+
+  inventoryCommand
+    .command("list")
+    .description("List local inventory.")
+    .action(() => {
+      const inventory = listInventory();
+      respond({ inventory }, () => {
+        printInventoryList(inventory);
+      });
+    });
+
+  inventoryCommand
+    .command("add")
+    .description("Add local inventory.")
+    .argument("<resourceId>", "resource id")
+    .argument("<amount>", "amount to add")
+    .action((resourceId: string, amount: string) => {
+      try {
+        const inventory = addInventory(resourceId, parsePositiveInteger(amount, "Inventory amount"));
+        respond({ inventory }, () => {
+          console.log(`Added ${amount} ${resourceId}.`);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to add inventory.");
+      }
+    });
+
+  program
+    .command("construct")
+    .description("Start or preview local construction from a live Kepler blueprint.")
+    .argument("<blueprintId>", "blueprint id")
+    .option("--dry-run", "check whether construction can start without changing local files")
+    .action(async (blueprintId: string, options: { dryRun?: boolean }) => {
+      try {
+        if (options.dryRun) {
+          const readiness = await inspectConstructionReadiness(blueprintId);
+          respond({ readiness }, () => {
+            printConstructionDryRun(readiness);
+          });
+          return;
+        }
+
+        const result = await startConstruction(blueprintId);
+        respond({ construction: result }, () => {
+          printConstructionStarted({
+            blueprintId,
+            outputModuleId: result.job.outputModuleId,
+            remainingTicks: result.job.remainingTicks,
+            facilityName: result.facility.displayName,
+          });
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to start construction.");
+      }
+    });
+
+  constructionCommand
+    .command("status")
+    .description("List active local construction jobs.")
+    .action(() => {
+      const jobs = listConstructionJobs().map(({ facility, job }) => ({
+        facility,
+        blueprintId: job.blueprintId,
+        remainingTicks: job.remainingTicks,
+      }));
+
+      respond({ jobs }, () => {
+        printConstructionStatus(jobs);
+      });
+    });
+
+  constructionCommand
+    .command("cancel")
+    .description("Cancel the active construction job on a fabrication module.")
+    .argument("<moduleId>", "module id")
+    .action((moduleId: string) => {
+      try {
+        const result = cancelConstruction(moduleId);
+        respond({ canceled: result }, () => {
+          printConstructionCanceled(result.facility.displayName, result.job.blueprintId);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to cancel construction.");
       }
     });
 
@@ -469,42 +773,6 @@ export async function runCli(argv: string[]): Promise<void> {
         );
       } catch (error) {
         fail(error instanceof Error ? error.message : "Unable to set module status.");
-      }
-    });
-
-  moduleCommand
-    .command("create")
-    .description("Create a new local habitat module.")
-    .requiredOption("--blueprint <blueprintId>", "blueprint id")
-    .requiredOption("--name <displayName>", "module display name")
-    .option("--connect <moduleId>", "connected module id", collectValues, [])
-    .option("--capability <capability>", "module capability", collectValues, [])
-    .option("--runtime-attributes <json>", "runtime attributes JSON object")
-    .action(async (options: {
-      blueprint: string;
-      name: string;
-      connect: string[];
-      capability: string[];
-      runtimeAttributes?: string;
-    }) => {
-      try {
-        const module = await createModule({
-          blueprintId: options.blueprint,
-          displayName: options.name,
-          connectedTo: options.connect,
-          capabilities: options.capability,
-          runtimeAttributes:
-            options.runtimeAttributes === undefined
-              ? undefined
-              : parseJsonObject(options.runtimeAttributes, "Runtime attributes"),
-        });
-        respond({ module }, () => {
-          console.log(`Created module "${module.displayName}".`);
-          console.log(`ID: ${module.id}`);
-          console.log(`Blueprint: ${module.blueprintId}`);
-        });
-      } catch (error) {
-        fail(error instanceof Error ? error.message : "Unable to create module.");
       }
     });
 
@@ -612,6 +880,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .command("tick")
     .description("Advance the local habitat simulation by a number of one-second ticks.")
     .argument("<count>", "number of ticks to run")
+    .argument("[unit]", "optional time unit")
     .addHelpText(
       "after",
       [
@@ -627,9 +896,12 @@ export async function runCli(argv: string[]): Promise<void> {
         "",
       ].join("\n"),
     )
-    .action((count: string) => {
+    .action((count: string, unit?: string) => {
       try {
-        const tick = runTickSimulation(parsePositiveInteger(count, "Tick count"));
+        const tick =
+          unit === "hour" || unit === "hours"
+            ? runTickSimulation(parsePositiveInteger(count, "Tick count") * 3600)
+            : runTickSimulation(parsePositiveInteger(count, "Tick count"));
         respond({ tick }, () => {
           printTickResult(tick);
         });

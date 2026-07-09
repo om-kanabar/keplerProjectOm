@@ -15,6 +15,28 @@ export async function getBlueprint(blueprintId: string): Promise<BlueprintRefere
   return blueprint;
 }
 
+export function getBlueprintRequiredFacility(blueprint: BlueprintReference): string | undefined {
+  const requiredFacility = blueprint.requiredFacility;
+
+  if (typeof requiredFacility === "string" && requiredFacility.length > 0) {
+    return requiredFacility;
+  }
+
+  if (!requiredFacility || typeof requiredFacility !== "object" || Array.isArray(requiredFacility)) {
+    return undefined;
+  }
+
+  const requiredFacilityRecord = requiredFacility as Record<string, unknown>;
+  const candidates = [
+    requiredFacilityRecord.moduleType,
+    requiredFacilityRecord.blueprintId,
+    requiredFacilityRecord.facilityType,
+    requiredFacilityRecord.id,
+  ];
+
+  return candidates.find((value): value is string => typeof value === "string" && value.length > 0);
+}
+
 export function formatBlueprintOutput(blueprint: BlueprintReference): string | undefined {
   if (!blueprint.output || typeof blueprint.output !== "object") {
     return undefined;

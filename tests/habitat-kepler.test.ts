@@ -92,6 +92,34 @@ async function startTestServer(): Promise<TestServer> {
     },
     {
       id: "blueprint-4",
+      blueprintId: "small-solar-array",
+      displayName: "Small Solar Array Blueprint",
+      description: "Deployable solar array blueprint",
+      status: "published",
+      requiredFacility: {
+        moduleType: "workshop-fabricator",
+        displayName: "Workshop Fabricator",
+      },
+      output: {
+        itemType: "module",
+        moduleType: "small-solar-array",
+        quantity: 1,
+      },
+      inputs: {
+        ferrite: 90,
+        "silicate-glass": 45,
+        "conductive-ore": 18,
+      },
+      buildTicks: 180,
+      repeatable: true,
+      runtimeAttributes: {
+        status: "online",
+        health: 100,
+      },
+      capabilities: ["power-generation"],
+    },
+    {
+      id: "blueprint-5",
       blueprintId: "survey-rover",
       displayName: "Survey Rover Blueprint",
       description: "Survey rover blueprint",
@@ -108,30 +136,60 @@ async function startTestServer(): Promise<TestServer> {
   const resourceCatalog = [
     {
       id: "resource-1",
-      resourceId: "ferrite",
+      resourceType: "ferrite",
       displayName: "Ferrite",
       description: "Iron-rich ore used for structural work.",
-      status: "available",
+      rarity: "common",
     },
     {
       id: "resource-2",
-      resourceId: "silicate-glass",
+      resourceType: "silicate-glass",
       displayName: "Silicate Glass",
       description: "Heat-resistant transparent construction material.",
-      status: "available",
+      rarity: "uncommon",
     },
     {
       id: "resource-3",
-      resourceId: "conductive-ore",
+      resourceType: "conductive-ore",
       displayName: "Conductive Ore",
       description: "Mineral feedstock used in wiring and circuitry.",
-      status: "scarce",
+      rarity: "rare",
     },
     {
       id: "resource-4",
-      resourceId: "water",
-      name: "Water",
+      resourceType: "water",
+      displayName: "Water",
       description: "A plain-text fallback name to exercise catalog variants.",
+      rarity: "operational",
+    },
+  ];
+  const moduleCatalog = [
+    {
+      id: "module-catalog-1",
+      moduleType: "life-support",
+      displayName: "Life Support",
+      status: "published",
+    },
+    {
+      id: "module-catalog-2",
+      moduleType: "workshop-fabricator",
+      displayName: "Workshop Fabricator",
+      status: "published",
+    },
+  ];
+  const siteTypeCatalog = [
+    {
+      id: "site-type-1",
+      siteType: "basalt-plain",
+      displayName: "Basalt Plain",
+      status: "available",
+    },
+  ];
+  const unlockCatalog = [
+    {
+      id: "unlock-1",
+      unlockId: "basic-fabrication",
+      displayName: "Basic Fabrication",
       status: "available",
     },
   ];
@@ -221,7 +279,7 @@ async function startTestServer(): Promise<TestServer> {
                 displayName: "Workshop Fabricator",
                 connectedTo: ["starter-command-module"],
                 runtimeAttributes: {
-                  status: "idle",
+                  status: "online",
                   health: 100,
                 },
                 capabilities: ["basic-fabrication"],
@@ -232,7 +290,7 @@ async function startTestServer(): Promise<TestServer> {
                 displayName: "Basic Suitport",
                 connectedTo: ["starter-life-support"],
                 runtimeAttributes: {
-                  status: "idle",
+                  status: "online",
                   health: 100,
                 },
                 capabilities: ["suitport-access"],
@@ -256,14 +314,49 @@ async function startTestServer(): Promise<TestServer> {
         return Response.json({ resources: resourceCatalog });
       }
 
-      if (request.method === "GET" && url.pathname === "/habitats/habitat-server-123") {
+      if (request.method === "GET" && url.pathname === "/catalog/modules") {
+        return Response.json({ modules: moduleCatalog });
+      }
+
+      if (request.method === "GET" && url.pathname === "/catalog/site-types") {
+        return Response.json({ siteTypes: siteTypeCatalog });
+      }
+
+      if (request.method === "GET" && url.pathname === "/catalog/unlocks") {
+        return Response.json({ unlocks: unlockCatalog });
+      }
+
+      if (request.method === "GET" && url.pathname === "/world/solar-irradiance") {
+        return Response.json({
+          solarIrradiance: {
+            wattsPerSquareMeter: 590,
+            asOf: "2026-07-08T12:00:00.000Z",
+          },
+        });
+      }
+
+      if (request.method === "GET" && url.pathname === "/health") {
+        return Response.json({
+          status: "ok",
+          service: "kepler-world",
+        });
+      }
+
+      if (request.method === "GET" && url.pathname === "/version") {
+        return Response.json({
+          version: "2026.07.08",
+          commit: "abc1234",
+        });
+      }
+
+      if (request.method === "GET" && url.pathname === "/habitats/habitat-server-123/registration") {
         return Response.json({
           habitat: {
             id: "habitat-server-123",
             habitatSlug: "artemis-ridge",
             displayName: "Artemis Ridge",
             catalogVersion: "2026-06-24",
-            status: "operational",
+            status: "online",
             lastSeenAt: "2026-07-06T12:00:00.000Z",
           },
         });
@@ -271,6 +364,47 @@ async function startTestServer(): Promise<TestServer> {
 
       if (request.method === "DELETE" && url.pathname === "/habitats/habitat-server-123") {
         return new Response(null, { status: 204 });
+      }
+
+      if (request.method === "POST" && url.pathname === "/habitats/habitat-server-123/heartbeat") {
+        return Response.json({
+          habitat: {
+            id: "habitat-server-123",
+            habitatSlug: "artemis-ridge",
+            displayName: "Artemis Ridge",
+            catalogVersion: "2026-07-08",
+            status: "registered",
+            lastSeenAt: "2026-07-08T12:00:01.000Z",
+          },
+        });
+      }
+
+      if (request.method === "POST" && url.pathname === "/habitats/habitat-server-123/summary") {
+        return Response.json({
+          summary: {
+            id: "summary-1",
+            habitatId: "habitat-server-123",
+            reportedAt: "2026-07-08T12:00:02.000Z",
+            currentTick: 0,
+            lastAppliedPlanetEventId: null,
+            status: "unknown",
+            activeAlertCount: 0,
+            criticalAlertCount: 0,
+            openTaskCount: 0,
+            builtModuleCount: 0,
+            activeConstructionCount: 0,
+            catalogVersion: "",
+            resourceSummary: {},
+            agentSummary: {},
+          },
+        });
+      }
+
+      if (request.method === "POST" && url.pathname === "/habitats/habitat-server-123/unlocks/report") {
+        return Response.json({
+          accepted: true,
+          receivedAt: "2026-07-08T12:00:03.000Z",
+        });
       }
 
       return Response.json({ error: { code: "not_found", message: "Not found." } }, { status: 404 });
@@ -450,7 +584,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Workshop Fabricator",
           connectedTo: ["starter-command-module"],
           runtimeAttributes: {
-            status: "idle",
+            status: "online",
             health: 100,
           },
           capabilities: ["basic-fabrication"],
@@ -462,7 +596,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Basic Suitport",
           connectedTo: ["starter-life-support"],
           runtimeAttributes: {
-            status: "idle",
+            status: "online",
             health: 100,
           },
           capabilities: ["suitport-access"],
@@ -550,7 +684,7 @@ describe("Kepler habitat registration commands", () => {
               displayName: "Workshop Fabricator",
               connectedTo: ["starter-command-module"],
               runtimeAttributes: {
-                status: "idle",
+                status: "online",
               },
               capabilities: ["basic-fabrication"],
               source: "starter",
@@ -561,7 +695,7 @@ describe("Kepler habitat registration commands", () => {
               displayName: "Basic Suitport",
               connectedTo: ["starter-life-support"],
               runtimeAttributes: {
-                status: "idle",
+                status: "online",
               },
               capabilities: ["suitport-access"],
               source: "starter",
@@ -579,11 +713,11 @@ describe("Kepler habitat registration commands", () => {
       expect(result.exitCode).toBe(0);
       expect(server.requests[0]).toMatchObject({
         method: "GET",
-        path: "/habitats/habitat-server-123",
+        path: "/habitats/habitat-server-123/registration",
       });
       expect(result.stdout).toContain("Kepler Registration");
       expect(result.stdout).toContain("Habitat ID: habitat-server-123");
-      expect(result.stdout).toContain("Status: operational");
+      expect(result.stdout).toContain("Status: online");
       expect(result.stdout).toContain("Catalog Version: 2026-06-24");
       expect(result.stdout).toContain("Modules: 6");
       expect(result.stdout).toContain("Modules");
@@ -643,7 +777,7 @@ describe("Kepler habitat registration commands", () => {
       expect(result.stdout).toContain("Modules");
       expect(result.stdout).toContain("| Module              | Nickname            | Status  | Draw | Draw per Tick Hour |");
       expect(result.stdout).toContain("| Command Module      | command-module      | active  | 0 kW | 0 kWh              |");
-      expect(result.stdout).toContain("| Basic Suitport      | basic-suitport      | idle    | 0 kW | 0 kWh              |");
+      expect(result.stdout).toContain("| Basic Suitport      | basic-suitport      | online  | 0 kW | 0 kWh              |");
       expect(result.stdout).toContain("| Basic Battery       | basic-battery       | offline | 0 kW | 0 kWh              |");
       expect(result.stdout).not.toContain("starter-command-module");
       expect(result.stdout).not.toContain("starter-suitport");
@@ -713,6 +847,106 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
+  test("module info shows power draw by state in a table", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const result = await runHabitat(["module", "basic-battery", "info"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Power draw by state");
+      expect(result.stdout).toContain("| Resource | Amount |");
+      expect(result.stdout).toContain("| offline  | 0      |");
+      expect(result.stdout).toContain("| online   | 0.5    |");
+      expect(result.stdout).toContain("| active   | 2      |");
+      expect(result.stdout).toContain("| damaged  | 0.5    |");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module info replaces idle with online in status and power draw output", async () => {
+    const server = await startTestServer();
+    writeData({
+      modules: [
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "idle",
+            health: 100,
+            powerDrawKw: {
+              offline: 0,
+              idle: 1,
+              active: 8,
+              damaged: 1,
+            },
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "show", "starter-workshop"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Status: online");
+      expect(result.stdout).toContain("| offline  | 0      |");
+      expect(result.stdout).toContain("| online   | 1      |");
+      expect(result.stdout).toContain("| active   | 8      |");
+      expect(result.stdout).toContain("| damaged  | 1      |");
+      expect(result.stdout).not.toContain("idle");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module set-status uses legacy idle power draw when online is requested", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "idle",
+            health: 100,
+            powerDrawKw: {
+              offline: 0,
+              idle: 1,
+              active: 8,
+              damaged: 1,
+            },
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "set-status", "starter-workshop", "online"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Status: online");
+      expect(result.stdout).toContain("Power Draw: 1 kW");
+    } finally {
+      server.close();
+    }
+  });
+
   test("blueprint list shows the live Kepler blueprint catalog in a table", async () => {
     const server = await startTestServer();
 
@@ -770,8 +1004,54 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
-  test("resource list shows the live Kepler resource catalog in a table", async () => {
+  test("health, version, world, and catalog commands query kepler-owned endpoints", async () => {
     const server = await startTestServer();
+
+    try {
+      const healthResult = await runHabitat(["health"], server);
+      const versionResult = await runHabitat(["version"], server);
+      const irradianceResult = await runHabitat(["world", "solar-irradiance"], server);
+      const modulesResult = await runHabitat(["catalog", "modules"], server);
+      const siteTypesResult = await runHabitat(["catalog", "site-types"], server);
+      const unlocksResult = await runHabitat(["catalog", "unlocks"], server);
+
+      expect(healthResult.exitCode).toBe(0);
+      expect(versionResult.exitCode).toBe(0);
+      expect(irradianceResult.exitCode).toBe(0);
+      expect(modulesResult.exitCode).toBe(0);
+      expect(siteTypesResult.exitCode).toBe(0);
+      expect(unlocksResult.exitCode).toBe(0);
+      expect(server.requests.map((request) => request.path)).toEqual([
+        "/health",
+        "/version",
+        "/world/solar-irradiance",
+        "/catalog/modules",
+        "/catalog/site-types",
+        "/catalog/unlocks",
+      ]);
+      expect(healthResult.stdout).toContain("kepler-world");
+      expect(versionResult.stdout).toContain("2026.07.08");
+      expect(irradianceResult.stdout).toContain("590");
+      expect(modulesResult.stdout).toContain("Workshop Fabricator");
+      expect(siteTypesResult.stdout).toContain("Basalt Plain");
+      expect(unlocksResult.stdout).toContain("Basic Fabrication");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("resource list shows the live Kepler resource catalog with local amounts in a table", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      inventory: {
+        ferrite: 90,
+      },
+    });
 
     try {
       const result = await runHabitat(["resource", "list"], server);
@@ -785,10 +1065,88 @@ describe("Kepler habitat registration commands", () => {
       expect(result.stdout).toContain("Name");
       expect(result.stdout).toContain("Resource ID");
       expect(result.stdout).toContain("Status");
+      expect(result.stdout).toContain("Amount");
       expect(result.stdout).toContain("Ferrite");
       expect(result.stdout).toContain("ferrite");
+      expect(result.stdout).toContain("90");
       expect(result.stdout).toContain("conductive-ore");
+      expect(result.stdout).toContain("0");
       expect(result.stdout).toContain("Water");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("heartbeat, summary, and unlock report send local habitat state to kepler", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      inventory: {
+        ferrite: 90,
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            health: 100,
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const heartbeatResult = await runHabitat(["heartbeat"], server);
+      const summaryResult = await runHabitat(["summary"], server);
+      const unlockReportResult = await runHabitat(["unlocks", "report"], server);
+
+      expect(heartbeatResult.exitCode).toBe(0);
+      expect(summaryResult.exitCode).toBe(0);
+      expect(unlockReportResult.exitCode).toBe(0);
+      expect(server.requests.map((request) => request.path)).toEqual([
+        "/habitats/habitat-server-123/heartbeat",
+        "/habitats/habitat-server-123/summary",
+        "/habitats/habitat-server-123/unlocks/report",
+      ]);
+      expect(server.requests[0].body).toMatchObject({
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+        moduleCount: 1,
+      });
+      expect(server.requests[1].body).toMatchObject({
+        habitatId: "habitat-server-123",
+        inventory: {
+          ferrite: 90,
+        },
+      });
+      expect(server.requests[2].body).toMatchObject({
+        habitatId: "habitat-server-123",
+        modules: [
+          {
+            id: "starter-command-module",
+          },
+        ],
+      });
+      expect(heartbeatResult.stdout).toContain("Heartbeat Response");
+      expect(heartbeatResult.stdout).toContain("Habitat");
+      expect(heartbeatResult.stdout).toContain("| Field");
+      expect(heartbeatResult.stdout).toContain("displayName");
+      expect(heartbeatResult.stdout).toContain("Artemis Ridge");
+      expect(summaryResult.stdout).toContain("Summary Response");
+      expect(summaryResult.stdout).toContain("Summary");
+      expect(summaryResult.stdout).toContain("| Field");
+      expect(summaryResult.stdout).toContain("currentTick");
+      expect(summaryResult.stdout).toContain("0");
+      expect(unlockReportResult.stdout).toContain("accepted");
     } finally {
       server.close();
     }
@@ -811,65 +1169,17 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
-  test("module create stores a new local module", async () => {
+  test("module create is no longer available so construction stays the only creation path", async () => {
     const server = await startTestServer();
 
     try {
-      await runHabitat(["register", "--name", "Artemis Ridge"], server);
-      const result = await runHabitat(
-        [
-          "module",
-          "create",
-          "--blueprint",
-          "storage-module",
-          "--name",
-          "Cargo Annex",
-          "--connect",
-          "starter-command-module",
-          "--capability",
-          "bulk-storage",
-          "--runtime-attributes",
-          '{"status":"active","health":88}',
-        ],
-        server,
-      );
+      const helpResult = await runHabitat(["--help"], server);
+      const result = await runHabitat(["module", "create", "--blueprint", "small-solar-array", "--name", "Cargo Annex"], server);
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Created module "Cargo Annex".');
-      expect(result.stdout).toContain("Blueprint: storage-module");
-
-      const modules = readData().modules as Array<Record<string, unknown>>;
-      const created = modules.find((module) => module.displayName === "Cargo Annex");
-
-      expect(created).toMatchObject({
-        blueprintId: "storage-module",
-        displayName: "Cargo Annex",
-        connectedTo: ["starter-command-module"],
-        capabilities: ["bulk-storage"],
-        source: "local",
-        runtimeAttributes: {
-          status: "active",
-          health: 88,
-        },
-      });
-      expect(created?.id).toEqual(expect.any(String));
-    } finally {
-      server.close();
-    }
-  });
-
-  test("module create rejects blueprint ids that are not in the live kepler catalog", async () => {
-    const server = await startTestServer();
-
-    try {
-      await runHabitat(["register", "--name", "Artemis Ridge"], server);
-      const result = await runHabitat(
-        ["module", "create", "--blueprint", "made-up-blueprint", "--name", "Ghost Module"],
-        server,
-      );
-
+      expect(helpResult.exitCode).toBe(0);
+      expect(helpResult.stdout).not.toContain("module create");
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('Blueprint "made-up-blueprint" was not found in Kepler\'s catalog.');
+      expect(result.stderr).toContain("Unknown command: module create");
     } finally {
       server.close();
     }
@@ -901,7 +1211,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Storage Alpha",
           connectedTo: [],
           runtimeAttributes: {
-            status: "idle",
+            status: "online",
             health: 100,
           },
           capabilities: ["storage"],
@@ -982,7 +1292,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Storage Alpha",
           connectedTo: [],
           runtimeAttributes: {
-            status: "idle",
+            status: "online",
           },
           capabilities: ["storage"],
           source: "local",
@@ -1135,7 +1445,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Storage Alpha",
           connectedTo: [],
           runtimeAttributes: {
-            status: "idle",
+            status: "online",
           },
           capabilities: ["storage"],
           source: "local",
@@ -1164,6 +1474,59 @@ describe("Kepler habitat registration commands", () => {
       const deleteResult = await runHabitat(["module", "delete", "command_module_1"], server);
       expect(deleteResult.exitCode).toBe(1);
       expect(deleteResult.stderr).toContain("Starter modules cannot be deleted.");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module commands identify modules by their unique display name", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "local-storage-1",
+          blueprintId: "storage-module",
+          displayName: "Storage Alpha",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["storage"],
+          source: "local",
+        },
+      ],
+    });
+
+    try {
+      const showResult = await runHabitat(["module", "Storage Alpha", "status"], server);
+      expect(showResult.exitCode).toBe(0);
+      expect(showResult.stdout).toContain("ID: local-storage-1");
+
+      const updateResult = await runHabitat(
+        ["module", "update", "Storage Alpha", "--status", "damaged"],
+        server,
+      );
+      expect(updateResult.exitCode).toBe(0);
+
+      const deleteResult = await runHabitat(["module", "delete", "Storage Alpha"], server);
+      expect(deleteResult.exitCode).toBe(0);
+      expect(deleteResult.stdout).toContain('Deleted module "Storage Alpha".');
     } finally {
       server.close();
     }
@@ -1245,11 +1608,11 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Command Module",
           connectedTo: [],
           runtimeAttributes: {
-            status: "idle",
+            status: "online",
             health: 100,
             powerDrawKw: {
               offline: 0,
-              idle: 0.25,
+              online: 0.25,
               active: 2,
             },
           },
@@ -1284,10 +1647,10 @@ describe("Kepler habitat registration commands", () => {
         },
       });
 
-      const invalidResult = await runHabitat(["module", "set-status", "starter-command-module", "online"], server);
+      const invalidResult = await runHabitat(["module", "set-status", "starter-command-module", "standby"], server);
       expect(invalidResult.exitCode).toBe(1);
       expect(invalidResult.stderr).toContain(
-        "Status must be one of: offline, idle, active, damaged.",
+        "Status must be one of: offline, online, active, damaged.",
       );
     } finally {
       server.close();
@@ -1352,7 +1715,7 @@ describe("Kepler habitat registration commands", () => {
 
       expect(parsed.ok).toBe(true);
       expect(parsed.data.registration.habitatId).toBe("habitat-server-123");
-      expect(parsed.data.registration.status).toBe("operational");
+      expect(parsed.data.registration.status).toBe("online");
       expect(parsed.data.modules).toHaveLength(2);
       expect("power" in parsed.data).toBe(false);
     } finally {
@@ -1375,7 +1738,7 @@ describe("Kepler habitat registration commands", () => {
           displayName: "Command Module",
           connectedTo: [],
           runtimeAttributes: {
-            status: "idle",
+            status: "online",
             powerDrawKw: {
               offline: 0,
               active: 2,
@@ -2114,6 +2477,719 @@ describe("Kepler habitat registration commands", () => {
       ) as { runtimeAttributes: { currentEnergyKwh: number } };
 
       expect(battery.runtimeAttributes.currentEnergyKwh).toBe(500);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("module battery recharge tops off to full capacity when a huge request leaves a tiny remainder", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 9,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 482.006389,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["module", "battery", "recharge", "64723189659136459"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Battery Charge After: 500 kWh");
+      expect(result.stdout).toContain("Completed Ticks: 7197");
+
+      const battery = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-basic-battery",
+      ) as { runtimeAttributes: { currentEnergyKwh: number } };
+
+      expect(battery.runtimeAttributes.currentEnergyKwh).toBe(500);
+    } finally {
+      server.close();
+    }
+  });
+
+  test("inventory add and list persists local resources", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+    });
+
+    try {
+      const addResult = await runHabitat(["inventory", "add", "ferrite", "90"], server);
+      expect(addResult.exitCode).toBe(0);
+      expect(addResult.stdout).toContain("Added 90 ferrite.");
+
+      const listResult = await runHabitat(["inventory", "list"], server);
+      expect(listResult.exitCode).toBe(0);
+      expect(listResult.stdout).toContain("Inventory");
+      expect(listResult.stdout).toContain("ferrite");
+      expect(listResult.stdout).toContain("90");
+      expect(readData().inventory).toMatchObject({
+        ferrite: 90,
+      });
+    } finally {
+      server.close();
+    }
+  });
+
+  test("resource add validates the live catalog and updates resource list amounts", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+    });
+
+    try {
+      const addResult = await runHabitat(["resource", "add", "silicate-glass", "45"], server);
+      expect(addResult.exitCode).toBe(0);
+      expect(addResult.stdout).toContain("Added 45 silicate-glass.");
+
+      const listResult = await runHabitat(["resource", "list"], server);
+      expect(listResult.exitCode).toBe(0);
+      expect(listResult.stdout).toContain("silicate-glass");
+      expect(listResult.stdout).toContain("45");
+      expect(listResult.stdout).toContain("ferrite");
+      expect(listResult.stdout).toContain("0");
+
+      const invalidResult = await runHabitat(["resource", "add", "made-up-resource", "5"], server);
+      expect(invalidResult.exitCode).toBe(1);
+      expect(invalidResult.stderr).toContain('Resource "made-up-resource" was not found in Kepler\'s catalog.');
+    } finally {
+      server.close();
+    }
+  });
+
+  test("resource add accepts a blueprint id and adds all required materials", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+    });
+
+    try {
+      const addResult = await runHabitat(["resource", "add", "small-solar-array"], server);
+      expect(addResult.exitCode).toBe(0);
+      expect(addResult.stdout).toContain('Added required resources for "small-solar-array".');
+      expect(addResult.stdout).toContain("ferrite: 90");
+      expect(addResult.stdout).toContain("silicate-glass: 45");
+      expect(addResult.stdout).toContain("conductive-ore: 18");
+      expect(readData().inventory).toMatchObject({
+        ferrite: 90,
+        "silicate-glass": 45,
+        "conductive-ore": 18,
+      });
+    } finally {
+      server.close();
+    }
+  });
+
+  test("construct dry-run reports whether a blueprint can start construction", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      inventory: {
+        ferrite: 90,
+        "silicate-glass": 45,
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 6,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 400,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["construct", "small-solar-array", "--dry-run"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Construction Dry Run");
+      expect(result.stdout).toContain("Required Facility: workshop-fabricator");
+      expect(result.stdout).toContain("Facility Exists: yes");
+      expect(result.stdout).toContain("Facility Available: yes");
+      expect(result.stdout).toContain("Supply Cache Online: yes");
+      expect(result.stdout).toContain("Inventory Ready: no");
+      expect(result.stdout).toContain("Missing Resources");
+      expect(result.stdout).toContain("conductive-ore");
+      expect(result.stdout).toContain("Can Start: no");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("construct spends inventory and attaches a local construction job to the workshop", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      inventory: {
+        ferrite: 90,
+        "silicate-glass": 45,
+        "conductive-ore": 18,
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 6,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 400,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["construct", "small-solar-array"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Started construction for "small-solar-array".');
+      expect(result.stdout).toContain("Output Module ID: small-solar-array-1");
+      expect(result.stdout).toContain("Remaining Ticks: 180");
+
+      expect(readData().inventory).toMatchObject({
+        ferrite: 0,
+        "silicate-glass": 0,
+        "conductive-ore": 0,
+      });
+
+      const workshop = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-workshop",
+      ) as { runtimeAttributes: Record<string, unknown> };
+
+      expect(workshop.runtimeAttributes.status).toBe("active");
+      expect(workshop.runtimeAttributes.constructionJob).toMatchObject({
+        blueprintId: "small-solar-array",
+        outputModuleId: "small-solar-array-1",
+        buildTicks: 180,
+        remainingTicks: 180,
+      });
+      const supplyCache = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-supply-cache",
+      ) as { runtimeAttributes: Record<string, unknown> };
+      expect(supplyCache.runtimeAttributes.status).toBe("active");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("construction status and cancel show and clear the active job without refunding resources", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      inventory: {
+        ferrite: 0,
+        "silicate-glass": 0,
+        "conductive-ore": 0,
+      },
+      modules: [
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+            constructionJob: {
+              blueprintId: "small-solar-array",
+              outputModuleId: "small-solar-array-1",
+              buildTicks: 180,
+              remainingTicks: 90,
+              futureModule: {
+                id: "small-solar-array-1",
+                blueprintId: "small-solar-array",
+                displayName: "Small Solar Array",
+                connectedTo: [],
+                runtimeAttributes: {
+                  status: "online",
+                  health: 100,
+                },
+                capabilities: ["power-generation"],
+                source: "local",
+              },
+            },
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const statusResult = await runHabitat(["construction", "status"], server);
+      expect(statusResult.exitCode).toBe(0);
+      expect(statusResult.stdout).toContain("Construction Jobs");
+      expect(statusResult.stdout).toContain("small-solar-array");
+      expect(statusResult.stdout).toContain("90");
+
+      const cancelResult = await runHabitat(["construction", "cancel", "workshop-fabricator-1"], server);
+      expect(cancelResult.exitCode).toBe(0);
+      expect(cancelResult.stdout).toContain('Canceled construction job on "Workshop Fabricator".');
+
+      const workshop = (readData().modules as Array<Record<string, unknown>>)[0] as {
+        runtimeAttributes: Record<string, unknown>;
+      };
+      expect(workshop.runtimeAttributes.status).toBe("online");
+      expect(workshop.runtimeAttributes.constructionJob).toBeUndefined();
+      const supplyCache = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-supply-cache",
+      ) as { runtimeAttributes: Record<string, unknown> };
+      expect(supplyCache.runtimeAttributes.status).toBe("online");
+      expect(readData().inventory).toMatchObject({
+        ferrite: 0,
+      });
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick completes active construction jobs when enough powered ticks finish", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      inventory: {
+        ferrite: 0,
+        "silicate-glass": 0,
+        "conductive-ore": 0,
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 6,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 400,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+            constructionJob: {
+              blueprintId: "small-solar-array",
+              outputModuleId: "small-solar-array-1",
+              buildTicks: 180,
+              remainingTicks: 180,
+              futureModule: {
+                id: "small-solar-array-1",
+                blueprintId: "small-solar-array",
+                displayName: "Small Solar Array",
+                connectedTo: [],
+                runtimeAttributes: {
+                  status: "online",
+                  health: 100,
+                },
+                capabilities: ["power-generation"],
+                source: "local",
+              },
+            },
+            powerDrawKw: {
+              active: 2,
+            },
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "180"], server);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Completed Construction");
+      expect(result.stdout).toContain("small-solar-array-1");
+
+      const listResult = await runHabitat(["module", "list"], server);
+      expect(listResult.stdout).toContain("Small Solar Array");
+
+      const showResult = await runHabitat(["module", "show", "small-solar-array-1"], server);
+      expect(showResult.exitCode).toBe(0);
+      expect(showResult.stdout).toContain("Blueprint: small-solar-array");
+      expect(showResult.stdout).toContain("Capabilities: power-generation");
+
+      const workshop = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-workshop",
+      ) as { runtimeAttributes: Record<string, unknown> };
+      expect(workshop.runtimeAttributes.status).toBe("online");
+      expect(workshop.runtimeAttributes.constructionJob).toBeUndefined();
+      const supplyCache = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-supply-cache",
+      ) as { runtimeAttributes: Record<string, unknown> };
+      expect(supplyCache.runtimeAttributes.status).toBe("online");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("tick recalculates power draw after construction finishes during the same run", async () => {
+    const server = await startTestServer();
+    writeData({
+      modules: [
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 10,
+            energyStorageKwh: 10,
+            reserveKwh: 0,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              offline: 0,
+            },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+        {
+          id: "workshop-fabricator-1",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "online",
+            powerDrawKw: {
+              online: 0,
+              active: 1800,
+            },
+            constructionJob: {
+              blueprintId: "small-solar-array",
+              outputModuleId: "small-solar-array-1",
+              buildTicks: 2,
+              remainingTicks: 2,
+              futureModule: {
+                id: "small-solar-array-1",
+                blueprintId: "small-solar-array",
+                displayName: "Small Solar Array 1",
+                connectedTo: ["starter-command-module"],
+                runtimeAttributes: {
+                  status: "active",
+                  powerDrawKw: {
+                    offline: 0,
+                    active: 3600,
+                  },
+                },
+                capabilities: ["power-generation"],
+                source: "local",
+              },
+            },
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const result = await runHabitat(["tick", "1"], server);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Requested Ticks: 1");
+      expect(result.stdout).toContain("Completed Ticks: 1");
+      expect(result.stdout).toContain("Total Power Draw: 1800 kW");
+      expect(result.stdout).toContain("Energy Consumed: 0.5 kWh");
+      expect(result.stdout).toContain("Battery Charge After: 9.5 kWh");
+
+      const workshop = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "workshop-fabricator-1",
+      ) as { runtimeAttributes: { status: string; constructionJob: { remainingTicks: number } } };
+      const supplyCache = (readData().modules as Array<Record<string, unknown>>).find(
+        (module) => module.id === "starter-supply-cache",
+      ) as { runtimeAttributes: { status: string } };
+
+      expect(workshop.runtimeAttributes.status).toBe("active");
+      expect(workshop.runtimeAttributes.constructionJob.remainingTicks).toBe(1);
+      expect(supplyCache.runtimeAttributes.status).toBe("active");
+    } finally {
+      server.close();
+    }
+  });
+
+  test("construction does not advance when ticks cannot complete because usable battery energy is gone", async () => {
+    const server = await startTestServer();
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            powerDrawKw: {
+              active: 6,
+            },
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 60,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+            constructionJob: {
+              blueprintId: "small-solar-array",
+              outputModuleId: "small-solar-array-1",
+              buildTicks: 180,
+              remainingTicks: 180,
+              futureModule: {
+                id: "small-solar-array-1",
+                blueprintId: "small-solar-array",
+                displayName: "Small Solar Array",
+                connectedTo: [],
+                runtimeAttributes: {
+                  status: "online",
+                  health: 100,
+                },
+                capabilities: ["power-generation"],
+                source: "local",
+              },
+            },
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+      ],
+    });
+
+    try {
+      const tickResult = await runHabitat(["tick", "180"], server);
+      expect(tickResult.exitCode).toBe(0);
+      expect(tickResult.stdout).toContain("Completed Ticks: 0");
+
+      const statusResult = await runHabitat(["construction", "status"], server);
+      expect(statusResult.exitCode).toBe(0);
+      expect(statusResult.stdout).toContain("Remaining Ticks");
+      expect(statusResult.stdout).toContain("180");
     } finally {
       server.close();
     }

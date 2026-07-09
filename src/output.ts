@@ -1,10 +1,12 @@
-import { formatBlueprintOutput, formatBlueprintValue } from "./blueprints";
+import type { ConstructionReadiness } from "./construction";
+import { formatBlueprintOutput, formatBlueprintValue, getBlueprintRequiredFacility } from "./blueprints";
 import { getModulePowerDrawKw } from "./tick";
 import { listModules, moduleCount } from "./modules";
 import {
   BatteryRechargeResult,
   BlueprintReference,
   HabitatModule,
+  InventoryRecord,
   KeplerRegistration,
   ResourceReference,
   TickSimulationResult,
@@ -58,7 +60,7 @@ export function printModuleList(modules: HabitatModule[]): void {
       return [
         module.displayName,
         module.blueprintId,
-        formatRuntimeValue(module.runtimeAttributes.status),
+        formatModuleStatusValue(module.runtimeAttributes.status),
         formatUnitValue(drawKw, "kW"),
         formatUnitValue(drawKw, "kWh"),
       ];
@@ -71,13 +73,13 @@ export function printModuleList(modules: HabitatModule[]): void {
 export function printModuleStatus(module: HabitatModule): void {
   console.log("Module Status");
   console.log(`  ID: ${module.id}`);
-  console.log(`  Status: ${formatRuntimeValue(module.runtimeAttributes.status)}`);
+  console.log(`  Status: ${formatModuleStatusValue(module.runtimeAttributes.status)}`);
   console.log(`  Power Draw: ${formatUnitValue(getModulePowerDrawKw(module), "kW")}`);
 }
 
 export function printStatusChangeConfirmation(module: HabitatModule): void {
   console.log(`Module ID: ${module.id}`);
-  console.log(`Status: ${formatRuntimeValue(module.runtimeAttributes.status)}`);
+  console.log(`Status: ${formatModuleStatusValue(module.runtimeAttributes.status)}`);
   console.log(`Power Draw: ${formatUnitValue(getModulePowerDrawKw(module), "kW")}`);
 }
 
@@ -89,6 +91,7 @@ export function printModuleDetails(module: HabitatModule): void {
   console.log(`  Source: ${module.source}`);
   console.log(`  Connected To: ${module.connectedTo.length === 0 ? "(none)" : module.connectedTo.join(", ")}`);
   console.log(`  Capabilities: ${module.capabilities.length === 0 ? "(none)" : module.capabilities.join(", ")}`);
+  printConstructionJob(module);
   printKeyProperties(module);
   printInputs(module);
   printState(module);
@@ -122,13 +125,23 @@ export function printBlueprintDetails(blueprint: BlueprintReference): void {
   console.log(`  Name: ${blueprint.displayName}`);
   console.log(`  Description: ${formatBlueprintValue(blueprint.description)}`);
   console.log(`  Status: ${formatRuntimeValue(blueprint.status)}`);
+  const requiredFacility = getBlueprintRequiredFacility(blueprint);
+  if (requiredFacility) {
+    console.log(`  Required Facility: ${requiredFacility}`);
+  }
   console.log(`  Output: ${formatBlueprintOutput(blueprint) ?? "(none)"}`);
   printBlueprintInputs(blueprint.inputs);
   console.log(`  Build Ticks: ${formatBlueprintValue(blueprint.buildTicks)}`);
   console.log(`  Repeatable: ${blueprint.repeatable ? "yes" : "no"}`);
+  if (Array.isArray(blueprint.capabilities)) {
+    console.log(`  Capabilities: ${blueprint.capabilities.join(", ") || "(none)"}`);
+  }
+  if (blueprint.runtimeAttributes && typeof blueprint.runtimeAttributes === "object") {
+    printBlueprintRuntimeAttributes(blueprint.runtimeAttributes as Record<string, unknown>);
+  }
 }
 
-export function printResourceList(resources: ResourceReference[]): void {
+export function printResourceList(resources: Array<ResourceReference & { amount?: number }>): void {
   console.log("Resources");
 
   if (resources.length === 0) {
@@ -137,12 +150,63 @@ export function printResourceList(resources: ResourceReference[]): void {
   }
 
   for (const line of renderTable(
-    ["Name", "Resource ID", "Status"],
+    ["Name", "Resource ID", "Status", "Amount"],
     resources.map((resource) => [
       formatResourceName(resource),
       resource.resourceId,
       formatRuntimeValue(resource.status),
+      formatDecimal(resource.amount ?? 0),
     ]),
+  )) {
+    console.log(`  ${line}`);
+  }
+}
+
+export function printServerRecord(title: string, values: Record<string, unknown>): void {
+  console.log(title);
+
+  const rows = Object.entries(values).sort(([left], [right]) => left.localeCompare(right));
+
+  if (rows.length === 0) {
+    console.log("  No data returned.");
+    return;
+  }
+
+  for (const [key, value] of rows) {
+    if (isPlainRecord(value)) {
+      console.log(`  ${capitalizeWord(key)}`);
+      for (const line of renderTable(
+        ["Field", "Value"],
+        Object.entries(value)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([field, nestedValue]) => [field, formatStructuredValue(nestedValue)]),
+      )) {
+        console.log(`    ${line}`);
+      }
+      continue;
+    }
+
+    console.log(`  ${key}: ${formatStructuredValue(value)}`);
+  }
+}
+
+export function printServerCollection(
+  title: string,
+  entries: Record<string, unknown>[],
+  preferredColumns: string[],
+): void {
+  console.log(title);
+
+  if (entries.length === 0) {
+    console.log("  No entries found.");
+    return;
+  }
+
+  const columns = getPreferredColumns(entries, preferredColumns);
+
+  for (const line of renderTable(
+    columns,
+    entries.map((entry) => columns.map((column) => formatStructuredValue(entry[column]))),
   )) {
     console.log(`  ${line}`);
   }
@@ -157,6 +221,13 @@ export function printTickResult(result: TickSimulationResult): void {
   console.log(`  Energy Consumed: ${formatUnitValue(result.energyConsumedKwh, "kWh")}`);
   console.log(`  Battery Charge Before: ${formatUnitValue(result.batteryChargeBeforeKwh, "kWh")}`);
   console.log(`  Battery Charge After: ${formatUnitValue(result.batteryChargeAfterKwh, "kWh")}`);
+
+  if ((result.completedConstructionModuleIds ?? []).length > 0) {
+    console.log("  Completed Construction");
+    for (const moduleId of result.completedConstructionModuleIds ?? []) {
+      console.log(`    ${moduleId}`);
+    }
+  }
 }
 
 export function printBatteryRechargeResult(result: BatteryRechargeResult): void {
@@ -168,6 +239,91 @@ export function printBatteryRechargeResult(result: BatteryRechargeResult): void 
   console.log(`  Energy Added: ${formatUnitValue(result.energyAddedKwh, "kWh")}`);
   console.log(`  Battery Charge Before: ${formatUnitValue(result.batteryChargeBeforeKwh, "kWh")}`);
   console.log(`  Battery Charge After: ${formatUnitValue(result.batteryChargeAfterKwh, "kWh")}`);
+}
+
+export function printInventoryList(inventory: InventoryRecord): void {
+  console.log("Inventory");
+
+  const rows = Object.entries(inventory)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([resourceId, amount]) => [resourceId, formatDecimal(amount)]);
+
+  if (rows.length === 0) {
+    console.log("  No inventory found.");
+    return;
+  }
+
+  for (const line of renderTable(["Resource", "Amount"], rows)) {
+    console.log(`  ${line}`);
+  }
+}
+
+export function printConstructionDryRun(readiness: ConstructionReadiness): void {
+  console.log("Construction Dry Run");
+  console.log(`  Blueprint: ${readiness.blueprintId}`);
+  console.log(`  Required Facility: ${readiness.requiredFacility}`);
+  console.log(`  Output Module Type: ${readiness.outputModuleType}`);
+  console.log(`  Output Module ID: ${readiness.outputModuleId}`);
+  console.log(`  Build Ticks: ${readiness.buildTicks}`);
+  console.log(`  Facility Exists: ${formatYesNo(readiness.facilityExists)}`);
+  console.log(`  Facility Available: ${formatYesNo(readiness.facilityAvailable)}`);
+  console.log(`  Supply Cache Online: ${formatYesNo(readiness.supplyCacheOnline)}`);
+  console.log(`  Prerequisites Met: ${formatYesNo(readiness.prerequisitesMet)}`);
+  console.log(`  Inventory Ready: ${formatYesNo(readiness.inventoryReady)}`);
+  console.log(`  Usable Power: ${formatYesNo(readiness.usablePower)}`);
+  console.log(`  Can Start: ${formatYesNo(readiness.canStart)}`);
+
+  console.log("  Resources To Spend");
+  for (const line of renderTable(
+    ["Resource", "Amount"],
+    Object.entries(readiness.requiredResources).map(([resourceId, amount]) => [resourceId, formatDecimal(amount)]),
+  )) {
+    console.log(`    ${line}`);
+  }
+
+  if (Object.keys(readiness.missingResources).length > 0) {
+    console.log("  Missing Resources");
+    for (const line of renderTable(
+      ["Resource", "Missing"],
+      Object.entries(readiness.missingResources).map(([resourceId, amount]) => [resourceId, formatDecimal(amount)]),
+    )) {
+      console.log(`    ${line}`);
+    }
+  }
+}
+
+export function printConstructionStarted(result: {
+  blueprintId: string;
+  outputModuleId: string;
+  remainingTicks: number;
+  facilityName: string;
+}): void {
+  console.log(`Started construction for "${result.blueprintId}".`);
+  console.log(`Facility: ${result.facilityName}`);
+  console.log(`Output Module ID: ${result.outputModuleId}`);
+  console.log(`Remaining Ticks: ${result.remainingTicks}`);
+}
+
+export function printConstructionStatus(jobs: Array<{ facility: HabitatModule; remainingTicks: number; blueprintId: string }>): void {
+  console.log("Construction Jobs");
+
+  if (jobs.length === 0) {
+    console.log("  No active construction jobs.");
+    return;
+  }
+
+  for (const line of renderTable(
+    ["Facility", "Blueprint", "Remaining Ticks"],
+    jobs.map((job) => [job.facility.displayName, job.blueprintId, formatDecimal(job.remainingTicks)]),
+  )) {
+    console.log(`  ${line}`);
+  }
+}
+
+export function printConstructionCanceled(facilityName: string, blueprintId: string): void {
+  console.log(`Canceled construction job on "${facilityName}".`);
+  console.log(`Blueprint: ${blueprintId}`);
+  console.log("Materials already spent were not refunded.");
 }
 
 function printBlueprintInputs(inputs: Record<string, unknown> | undefined): void {
@@ -202,7 +358,7 @@ function printKeyProperties(module: HabitatModule): void {
 
 function getKeyProperties(module: HabitatModule): Array<{ label: string; value: unknown }> {
   const genericProperties = [
-    createProperty("Status", module.runtimeAttributes.status),
+    createProperty("Status", formatModuleStatusValue(module.runtimeAttributes.status)),
     createProperty("Condition", module.runtimeAttributes.condition),
     createProperty("Health", module.runtimeAttributes.health),
   ];
@@ -243,6 +399,16 @@ function printInputs(module: HabitatModule): void {
       console.log(`      ${section.unit}`);
     }
 
+    if (section.title === "Power draw by state") {
+      for (const line of renderTable(
+        ["Resource", "Amount"],
+        section.items.map((item) => [item.label, formatTableAmount(item.value)]),
+      )) {
+        console.log(`      ${line}`);
+      }
+      continue;
+    }
+
     for (const line of renderTable(
       ["Field", "Value"],
       section.items.map((item) => [item.label, formatRuntimeValue(item.value)]),
@@ -268,6 +434,34 @@ function printState(module: HabitatModule): void {
   }
 }
 
+function printConstructionJob(module: HabitatModule): void {
+  const job = module.runtimeAttributes.constructionJob;
+
+  if (!job || typeof job !== "object" || Array.isArray(job)) {
+    return;
+  }
+
+  const constructionJob = job as Record<string, unknown>;
+  console.log("  Active Construction Job:");
+  console.log(`    Blueprint: ${formatRuntimeValue(constructionJob.blueprintId)}`);
+  console.log(`    Output Module ID: ${formatRuntimeValue(constructionJob.outputModuleId)}`);
+  console.log(`    Build Ticks: ${formatRuntimeValue(constructionJob.buildTicks)}`);
+  console.log(`    Remaining Ticks: ${formatRuntimeValue(constructionJob.remainingTicks)}`);
+}
+
+function printBlueprintRuntimeAttributes(runtimeAttributes: Record<string, unknown>): void {
+  const rows = formatKeyValueRows(runtimeAttributes);
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  console.log("  Runtime Attributes");
+  for (const [key, value] of rows) {
+    console.log(`    ${key}: ${value}`);
+  }
+}
+
 function getInputSections(
   module: HabitatModule,
 ): Array<{ title: string; unit?: string; items: Array<{ label: string; value: unknown }> }> {
@@ -276,7 +470,7 @@ function getInputSections(
   const powerDraw = module.runtimeAttributes.powerDrawKw;
   if (powerDraw && typeof powerDraw === "object") {
     const powerDrawEntries = Object.entries(powerDraw as Record<string, unknown>).map(([key, value]) => ({
-      label: capitalizeWord(key),
+      label: formatModuleStatusValue(key),
       value,
     }));
 
@@ -303,19 +497,11 @@ function getInputSections(
 function getStateRows(module: HabitatModule): Array<{ label: string; value: unknown }> {
   return [
     createProperty("Health", module.runtimeAttributes.health),
-    createProperty("Initial status", module.runtimeAttributes.status),
+    createProperty("Initial status", formatModuleStatusValue(module.runtimeAttributes.status)),
     createProperty("Crew access capacity", module.runtimeAttributes.crewAccessCapacity),
     createProperty("Suit oxygen remaining, kg", module.runtimeAttributes.suitOxygenRemainingKg),
     createProperty("Suit oxygen capacity, kg", module.runtimeAttributes.suitOxygenCapacityKg),
   ].filter((row): row is { label: string; value: unknown } => row !== undefined);
-}
-
-function capitalizeWord(value: string): string {
-  if (value.length === 0) {
-    return value;
-  }
-
-  return `${value[0].toUpperCase()}${value.slice(1)}`;
 }
 
 function formatKeyValueRows(values: Record<string, unknown> | undefined): string[][] {
@@ -344,8 +530,54 @@ function formatRuntimeValue(value: unknown): string {
   return String(value);
 }
 
+function formatModuleStatusValue(value: unknown): string {
+  const status = formatRuntimeValue(value);
+
+  if (status === "idle") {
+    return "online";
+  }
+
+  return status;
+}
+
+function formatYesNo(value: boolean): string {
+  return value ? "yes" : "no";
+}
+
 function formatUnitValue(value: number, unit: string): string {
   return `${formatDecimal(value)} ${unit}`;
+}
+
+function formatTableAmount(value: unknown): string {
+  if (typeof value === "number") {
+    return formatDecimal(value);
+  }
+
+  return formatRuntimeValue(value);
+}
+
+function formatStructuredValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") {
+    return "(none)";
+  }
+
+  if (typeof value === "number") {
+    return formatDecimal(value);
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function capitalizeWord(value: string): string {
+  if (value.length === 0) {
+    return value;
+  }
+
+  return `${value[0].toUpperCase()}${value.slice(1)}`;
 }
 
 function renderTable(headers: string[], rows: string[][]): string[] {
@@ -383,4 +615,19 @@ function formatResourceName(resource: ResourceReference): string {
     (typeof resource.id === "string" ? resource.id : undefined) ??
     "(unknown)"
   );
+}
+
+function getPreferredColumns(entries: Record<string, unknown>[], preferredColumns: string[]): string[] {
+  const entryKeys = new Set(entries.flatMap((entry) => Object.keys(entry)));
+  const selected = preferredColumns.filter((column) => entryKeys.has(column));
+
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  return Object.keys(entries[0] ?? {}).slice(0, 4);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
