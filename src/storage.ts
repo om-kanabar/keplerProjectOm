@@ -1,24 +1,103 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import { HabitatData, HabitatModule, InventoryRecord, KeplerRegistration } from "./types";
 
-const DATA_FILE_NAME = ".habitat-data.json";
-const MODULES_FILE_NAME = "habitat-modules.json";
+const DATA_FILE_NAME = "habitat.sqlite";
+const STATE_TABLE_NAME = "habitat_state";
+
+type StoredHabitatData = HabitatData & {
+  keplerRegistration?: Omit<KeplerRegistration, "blueprints">;
+};
 
 export function readData(): HabitatData {
-  const filePath = join(process.cwd(), DATA_FILE_NAME);
+  const dbPath = getDatabasePath();
 
-  if (!existsSync(filePath)) {
+  if (!existsSync(dbPath)) {
     return {};
   }
 
-  const raw = readFileSync(filePath, "utf8");
+  const db = openDatabase(dbPath, { readonly: true });
 
-  if (!raw.trim()) {
+  try {
+    const row = db.query(`SELECT data_json FROM ${STATE_TABLE_NAME} WHERE id = 1`).get() as
+      | { data_json?: string }
+      | null;
+
+    if (!row?.data_json) {
+      return {};
+    }
+
+    return parseStoredData(row.data_json);
+  } catch {
     return {};
+  } finally {
+    db.close();
+  }
+}
+
+export function writeData(data: HabitatData): void {
+  const dbPath = getDatabasePath();
+  const db = openDatabase(dbPath, { create: true });
+
+  try {
+    ensureSchema(db);
+
+    db.query(
+      `
+        INSERT INTO ${STATE_TABLE_NAME} (id, data_json)
+        VALUES (1, $dataJson)
+        ON CONFLICT(id) DO UPDATE SET
+          data_json = excluded.data_json
+      `,
+    ).run({
+      $dataJson: JSON.stringify(sanitizeHabitatData(data)),
+    });
+  } finally {
+    db.close();
+  }
+}
+
+function getDatabasePath(): string {
+  return join(process.cwd(), DATA_FILE_NAME);
+}
+
+function openDatabase(path: string, options?: { readonly?: boolean; create?: boolean }): Database {
+  return new Database(path, options);
+}
+
+function ensureSchema(db: Database): void {
+  db.query(`
+    CREATE TABLE IF NOT EXISTS ${STATE_TABLE_NAME} (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data_json TEXT NOT NULL
+    )
+  `).run();
+}
+
+function sanitizeHabitatData(data: HabitatData): StoredHabitatData {
+  const { keplerRegistration, ...rest } = data;
+
+  return {
+    ...rest,
+    keplerRegistration: sanitizeKeplerRegistration(keplerRegistration),
+  };
+}
+
+function sanitizeKeplerRegistration(
+  registration: KeplerRegistration | undefined,
+): Omit<KeplerRegistration, "blueprints"> | undefined {
+  if (!registration) {
+    return undefined;
   }
 
-  const parsed = JSON.parse(raw) as Partial<HabitatData>;
+  const { blueprints: _blueprints, ...rest } = registration;
+
+  return rest;
+}
+
+function parseStoredData(value: string): HabitatData {
+  const parsed = JSON.parse(value) as Partial<StoredHabitatData>;
 
   return {
     ...parsed,
@@ -28,20 +107,32 @@ export function readData(): HabitatData {
   };
 }
 
-export function writeData(data: HabitatData): void {
-  const dataFilePath = join(process.cwd(), DATA_FILE_NAME);
-  const modulesFilePath = join(process.cwd(), MODULES_FILE_NAME);
-
-  writeFileSync(dataFilePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-  writeFileSync(modulesFilePath, `${JSON.stringify(data.modules ?? [], null, 2)}\n`, "utf8");
-}
-
-function parseKeplerRegistration(value: unknown): KeplerRegistration | undefined {
+function parseKeplerRegistration(
+  value: unknown,
+): Omit<KeplerRegistration, "blueprints"> | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
   }
 
-  return value as KeplerRegistration;
+  const registration = value as Partial<KeplerRegistration>;
+
+  if (
+    typeof registration.habitatUuid !== "string" ||
+    typeof registration.habitatId !== "string" ||
+    typeof registration.displayName !== "string"
+  ) {
+    return undefined;
+  }
+
+  return {
+    habitatUuid: registration.habitatUuid,
+    habitatId: registration.habitatId,
+    displayName: registration.displayName,
+    habitatSlug: typeof registration.habitatSlug === "string" ? registration.habitatSlug : undefined,
+    catalogVersion: typeof registration.catalogVersion === "string" ? registration.catalogVersion : undefined,
+    status: typeof registration.status === "string" ? registration.status : undefined,
+    lastSeenAt: typeof registration.lastSeenAt === "string" || registration.lastSeenAt === null ? registration.lastSeenAt : undefined,
+  };
 }
 
 function parseModules(value: unknown): HabitatModule[] | undefined {

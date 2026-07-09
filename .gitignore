@@ -1,2 +1,5 @@
 .env
 node_modules
+habitat.sqlite
+habitat.sqlite-wal
+habitat.sqlite-shm

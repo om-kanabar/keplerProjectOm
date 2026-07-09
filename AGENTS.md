@@ -16,15 +16,14 @@ This repo is a Bun + TypeScript CLI called `habitat`. Its job is to register a l
 
 - Keep `--json` stable. It is the machine-readable API for other tools.
 - Prefer updating typed code paths over manually editing JSON data files.
-- Preserve compatibility with both `.habitat-data.json` and `habitat-modules.json`.
-- If you change persisted fields, update types, storage parsing, and tests together.
+- SQLite is the active local persistence layer. Do not add new file-based fallbacks for habitat state.
+- If you change persisted fields, update types, storage parsing, database code, and tests together.
 
 ## Local Data
 
-- Main state file: [/.habitat-data.json](/Users/Om/labs/keplerProject/.habitat-data.json)
-- Module mirror: [/habitat-modules.json](/Users/Om/labs/keplerProject/habitat-modules.json)
+- Main local database: [/habitat.sqlite](/Users/Om/labs/keplerProject/habitat.sqlite)
 
-The top-level local shape is `HabitatData`, containing optional `keplerRegistration` and `modules`. The exact schema lives in [src/types.ts](/Users/Om/labs/keplerProject/src/types.ts).
+The top-level local shape is still `HabitatData`, containing optional `keplerRegistration`, `modules`, and `inventory`. The exact schema lives in [src/types.ts](/Users/Om/labs/keplerProject/src/types.ts).
 
 ## API And Schema Docs
 

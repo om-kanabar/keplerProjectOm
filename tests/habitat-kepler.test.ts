@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, renameSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 
 type RecordedRequest = {
   method: string;
@@ -27,19 +28,53 @@ let workdir = "";
 const HABITAT_BIN = process.env.HABITAT_BIN ?? "/Users/Om/.bun/bin/habitat";
 
 function dataPath(): string {
-  return join(workdir, ".habitat-data.json");
-}
-
-function modulesPath(): string {
-  return join(workdir, "habitat-modules.json");
+  return join(workdir, "habitat.sqlite");
 }
 
 function readData(): Record<string, unknown> {
-  return JSON.parse(readFileSync(dataPath(), "utf8")) as Record<string, unknown>;
+  if (!existsSync(dataPath())) {
+    return {};
+  }
+
+  const db = new Database(dataPath(), { readonly: true });
+
+  try {
+    const row = db.query("SELECT data_json FROM habitat_state WHERE id = 1").get() as
+      | { data_json?: string }
+      | null;
+
+    if (!row?.data_json) {
+      return {};
+    }
+
+    return JSON.parse(row.data_json) as Record<string, unknown>;
+  } finally {
+    db.close();
+  }
 }
 
 function writeData(data: Record<string, unknown>): void {
-  writeFileSync(dataPath(), JSON.stringify(data, null, 2));
+  const db = new Database(dataPath(), { create: true });
+
+  try {
+    db.query(`
+      CREATE TABLE IF NOT EXISTS habitat_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        data_json TEXT NOT NULL
+      )
+    `).run();
+
+    db.query(`
+      INSERT INTO habitat_state (id, data_json)
+      VALUES (1, $dataJson)
+      ON CONFLICT(id) DO UPDATE SET
+        data_json = excluded.data_json
+    `).run({
+      $dataJson: JSON.stringify(data, null, 2),
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function startTestServer(options: TestServerOptions = {}): Promise<TestServer> {
@@ -621,102 +656,95 @@ describe("Kepler habitat registration commands", () => {
 
   test("status fetches the registered habitat status from Kepler", async () => {
     const server = await startTestServer();
-    writeFileSync(
-      dataPath(),
-      JSON.stringify(
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
         {
-          keplerRegistration: {
-            habitatUuid: "11111111-1111-4111-8111-111111111111",
-            habitatId: "habitat-server-123",
-            displayName: "Artemis Ridge",
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
           },
-          modules: [
-            {
-              id: "starter-command-module",
-              blueprintId: "command-module",
-              displayName: "Command Module",
-              connectedTo: [],
-              runtimeAttributes: {
-                status: "active",
-              },
-              capabilities: ["habitat-command"],
-              source: "starter",
-            },
-            {
-              id: "starter-life-support",
-              blueprintId: "life-support",
-              displayName: "Life Support",
-              connectedTo: ["starter-command-module"],
-              runtimeAttributes: {
-                status: "active",
-              },
-              capabilities: ["atmosphere-control"],
-              source: "starter",
-            },
-            {
-              id: "starter-basic-battery",
-              blueprintId: "basic-battery",
-              displayName: "Basic Battery",
-              connectedTo: ["starter-command-module"],
-              runtimeAttributes: {
-                status: "offline",
-                currentEnergyKwh: 500,
-                energyStorageKwh: 500,
-                reserveKwh: 60,
-                maxPowerOutputKw: 40,
-                powerDrawKw: {
-                  offline: 0,
-                  online: 0.5,
-                  active: 2,
-                  damaged: 0.5,
-                },
-                oxygenUseKgPerHour: 0,
-                crewAccessCapacity: 1,
-                suitOxygenRemainingKg: 0,
-                suitOxygenCapacityKg: 0,
-              },
-              capabilities: ["power-storage"],
-              source: "starter",
-            },
-            {
-              id: "starter-supply-cache",
-              blueprintId: "supply-cache",
-              displayName: "Supply Cache",
-              connectedTo: ["starter-command-module"],
-              runtimeAttributes: {
-                status: "active",
-              },
-              capabilities: ["storage"],
-              source: "starter",
-            },
-            {
-              id: "starter-workshop",
-              blueprintId: "workshop-fabricator",
-              displayName: "Workshop Fabricator",
-              connectedTo: ["starter-command-module"],
-              runtimeAttributes: {
-                status: "online",
-              },
-              capabilities: ["basic-fabrication"],
-              source: "starter",
-            },
-            {
-              id: "starter-suitport",
-              blueprintId: "basic-suitport",
-              displayName: "Basic Suitport",
-              connectedTo: ["starter-life-support"],
-              runtimeAttributes: {
-                status: "online",
-              },
-              capabilities: ["suitport-access"],
-              source: "starter",
-            },
-          ],
+          capabilities: ["habitat-command"],
+          source: "starter",
         },
-        null,
-        2,
-      ),
-    );
+        {
+          id: "starter-life-support",
+          blueprintId: "life-support",
+          displayName: "Life Support",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["atmosphere-control"],
+          source: "starter",
+        },
+        {
+          id: "starter-basic-battery",
+          blueprintId: "basic-battery",
+          displayName: "Basic Battery",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "offline",
+            currentEnergyKwh: 500,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            maxPowerOutputKw: 40,
+            powerDrawKw: {
+              offline: 0,
+              online: 0.5,
+              active: 2,
+              damaged: 0.5,
+            },
+            oxygenUseKgPerHour: 0,
+            crewAccessCapacity: 1,
+            suitOxygenRemainingKg: 0,
+            suitOxygenCapacityKg: 0,
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-supply-cache",
+          blueprintId: "supply-cache",
+          displayName: "Supply Cache",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "active",
+          },
+          capabilities: ["storage"],
+          source: "starter",
+        },
+        {
+          id: "starter-workshop",
+          blueprintId: "workshop-fabricator",
+          displayName: "Workshop Fabricator",
+          connectedTo: ["starter-command-module"],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["basic-fabrication"],
+          source: "starter",
+        },
+        {
+          id: "starter-suitport",
+          blueprintId: "basic-suitport",
+          displayName: "Basic Suitport",
+          connectedTo: ["starter-life-support"],
+          runtimeAttributes: {
+            status: "online",
+          },
+          capabilities: ["suitport-access"],
+          source: "starter",
+        },
+      ],
+    });
 
     try {
       const result = await runHabitat(["status"], server);
@@ -743,24 +771,17 @@ describe("Kepler habitat registration commands", () => {
 
   test("unregister deletes the remote habitat and clears local registration", async () => {
     const server = await startTestServer();
-    writeFileSync(
-      dataPath(),
-      JSON.stringify(
-        {
-          zones: [],
-          doors: [],
-          airlocks: [],
-          mapPlacements: [],
-          keplerRegistration: {
-            habitatUuid: "11111111-1111-4111-8111-111111111111",
-            habitatId: "habitat-server-123",
-            displayName: "Artemis Ridge",
-          },
-        },
-        null,
-        2,
-      ),
-    );
+    writeData({
+      zones: [],
+      doors: [],
+      airlocks: [],
+      mapPlacements: [],
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+    });
 
     try {
       const result = await runHabitat(["unregister"], server);
@@ -773,6 +794,38 @@ describe("Kepler habitat registration commands", () => {
       expect(result.stdout).toContain('Unregistered habitat "Artemis Ridge".');
       expect(readData()).toEqual({});
     } finally {
+      server.close();
+    }
+  });
+
+  test("status does not fall back to old JSON state when the sqlite database is missing", async () => {
+    const server = await startTestServer();
+
+    try {
+      await runHabitat(["register", "--name", "Artemis Ridge"], server);
+      const databasePath = dataPath();
+      const missingPath = `${databasePath}-old`;
+
+      renameSync(databasePath, missingPath);
+
+      const missingResult = await runHabitat(["status"], server);
+      expect(missingResult.exitCode).toBe(0);
+      expect(missingResult.stdout).toContain("Not registered");
+      expect(missingResult.stdout).not.toContain("Habitat ID: habitat-server-123");
+
+      renameSync(missingPath, databasePath);
+
+      const restoredResult = await runHabitat(["status"], server);
+      expect(restoredResult.exitCode).toBe(0);
+      expect(restoredResult.stdout).toContain("Habitat ID: habitat-server-123");
+    } finally {
+      const databasePath = dataPath();
+      const missingPath = `${databasePath}-old`;
+
+      if (existsSync(missingPath)) {
+        renameSync(missingPath, databasePath);
+      }
+
       server.close();
     }
   });
@@ -1640,7 +1693,7 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
-  test("module set-status updates only runtime status, validates values, and writes habitat-modules.json", async () => {
+  test("module set-status updates only runtime status, validates values, and writes the sqlite database", async () => {
     const server = await startTestServer();
     writeData({
       keplerRegistration: {
@@ -1685,8 +1738,7 @@ describe("Kepler habitat registration commands", () => {
         health: 100,
       });
 
-      const modulesFile = JSON.parse(readFileSync(modulesPath(), "utf8")) as Array<Record<string, unknown>>;
-      expect(modulesFile[0]).toMatchObject({
+      expect((readData().modules as Array<Record<string, unknown>>)[0]).toMatchObject({
         id: "starter-command-module",
         runtimeAttributes: {
           status: "active",
