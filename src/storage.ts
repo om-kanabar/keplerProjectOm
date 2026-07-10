@@ -104,6 +104,7 @@ function parseStoredData(value: string): HabitatData {
     keplerRegistration: parseKeplerRegistration(parsed.keplerRegistration),
     inventory: parseInventory(parsed.inventory),
     modules: parseModules(parsed.modules),
+    habitatApiBaseUrl: typeof parsed.habitatApiBaseUrl === "string" ? parsed.habitatApiBaseUrl : undefined,
   };
 }
 

@@ -34,6 +34,16 @@ export function hydrateStarterModules(starterModules: StarterModulePayload[]): H
   }));
 }
 
+export function mergeStarterModules(
+  existingModules: HabitatModule[],
+  starterModules: StarterModulePayload[],
+): HabitatModule[] {
+  const hydratedStarters = hydrateStarterModules(starterModules);
+  const localModules = existingModules.filter((module) => module.source === "local");
+
+  return [...hydratedStarters, ...localModules];
+}
+
 export function listModules(): HabitatModule[] {
   return readData().modules ?? [];
 }

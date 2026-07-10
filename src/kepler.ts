@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { hydrateStarterModules } from "./modules";
+import { hydrateStarterModules, mergeStarterModules } from "./modules";
 import { readData, writeData } from "./storage";
 import { BlueprintReference, KeplerRegistration, ResourceReference, StarterModulePayload } from "./types";
 
@@ -17,6 +17,7 @@ type HabitatResponse = {
     catalogVersion: string;
     status: string;
     lastSeenAt?: string | null;
+    starterModules?: StarterModulePayload[];
   };
 };
 
@@ -30,6 +31,7 @@ type HabitatRegistrationLookupResponse =
       catalogVersion?: string;
       status?: string;
       lastSeenAt?: string | null;
+      starterModules?: StarterModulePayload[];
     };
 
 type BlueprintCatalogResponse = {
@@ -168,10 +170,15 @@ export async function fetchKeplerRegistration(): Promise<KeplerRegistration | un
     `/habitats/${registration.habitatId}/registration`,
   );
   const updated = updateRegistrationFromHabitat(registration, response);
+  const starterModules =
+    "habitat" in response ? response.habitat.starterModules : response.starterModules;
 
   writeData({
     ...data,
     keplerRegistration: updated,
+    modules: Array.isArray(starterModules)
+      ? mergeStarterModules(data.modules ?? [], starterModules)
+      : data.modules,
   });
 
   return updated;

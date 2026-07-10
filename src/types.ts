@@ -101,4 +101,5 @@ export type HabitatData = Record<string, unknown> & {
   keplerRegistration?: KeplerRegistration;
   modules?: HabitatModule[];
   inventory?: InventoryRecord;
+  habitatApiBaseUrl?: string;
 };

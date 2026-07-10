@@ -20,3 +20,21 @@ declare module "bun:sqlite" {
     close(throwOnError?: boolean): void;
   }
 }
+
+declare namespace Bun {
+  interface Server {
+    hostname: string;
+    port: number;
+    stop(closeActiveConnections?: boolean): void;
+  }
+
+  interface ServeOptions {
+    hostname?: string;
+    port?: number;
+    fetch(request: Request): Response | Promise<Response>;
+  }
+}
+
+declare const Bun: {
+  serve(options: Bun.ServeOptions): Bun.Server;
+};

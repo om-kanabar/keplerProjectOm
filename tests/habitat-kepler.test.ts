@@ -487,6 +487,7 @@ async function runHabitat(args: string[], server: TestServer): Promise<{ stdout:
     cwd: workdir,
     env: {
       ...process.env,
+      HABITAT_DISABLE_LOCAL_API: "1",
       KEPLER_WORLD_BASE_URL: server.baseUrl,
       KEPLER_PLANET_TOKEN: "test-token",
     },
@@ -509,6 +510,349 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(workdir, { recursive: true, force: true });
+});
+
+describe("Local Habitat API", () => {
+  test("GET /registration returns { registration: null } when no habitat is registered", async () => {
+    process.chdir(workdir);
+    const { createApp } = await import("../src/server/app");
+    const app = createApp();
+
+    const response = await app.request("/registration");
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      registration: null,
+    });
+  });
+
+  test("GET /status hydrates starter modules from Kepler when the local server has registration but no modules", async () => {
+    process.chdir(workdir);
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+    });
+
+    const previousBaseUrl = process.env.KEPLER_WORLD_BASE_URL;
+    const previousToken = process.env.KEPLER_PLANET_TOKEN;
+    process.env.KEPLER_WORLD_BASE_URL = "http://kepler.test";
+    process.env.KEPLER_PLANET_TOKEN = "test-token";
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      Response.json({
+        habitat: {
+          id: "habitat-server-123",
+          displayName: "Artemis Ridge",
+          habitatSlug: "artemis-ridge",
+          catalogVersion: "2026-07-10",
+          status: "online",
+          starterModules: [
+            {
+              id: "starter-command-module",
+              blueprintId: "command-module",
+              displayName: "Command Module",
+              connectedTo: [],
+              runtimeAttributes: {
+                status: "active",
+                health: 100,
+              },
+              capabilities: ["habitat-command"],
+            },
+          ],
+        },
+      })) as typeof fetch;
+
+    try {
+      const { createApp } = await import("../src/server/app");
+      const app = createApp();
+      const response = await app.request("/status");
+      const payload = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(payload.modules).toEqual([
+        {
+          id: "starter-command-module",
+          blueprintId: "command-module",
+          displayName: "Command Module",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "active",
+            health: 100,
+          },
+          capabilities: ["habitat-command"],
+          source: "starter",
+        },
+      ]);
+      expect((readData().modules as unknown[] | undefined)?.length).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      process.env.KEPLER_WORLD_BASE_URL = previousBaseUrl;
+      process.env.KEPLER_PLANET_TOKEN = previousToken;
+    }
+  });
+
+  test("API client uses HABITAT_API_BASE_URL for status requests", async () => {
+    const previousBaseUrl = process.env.HABITAT_API_BASE_URL;
+    process.env.HABITAT_API_BASE_URL = "http://127.0.0.1:8787";
+
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; method?: string }> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: typeof input === "string" ? input : input.toString(),
+        method: init?.method,
+      });
+
+      return Response.json({
+        registration: {
+          habitatId: "habitat-server-123",
+          habitatUuid: "11111111-1111-4111-8111-111111111111",
+          displayName: "Artemis Ridge",
+        },
+        modules: [],
+      });
+    }) as typeof fetch;
+
+    try {
+      const { createHabitatApiClient } = await import("../src/api-client");
+      const client = createHabitatApiClient();
+      const result = await client.getStatus();
+
+      expect(result.registration?.habitatId).toBe("habitat-server-123");
+      expect(calls).toEqual([
+        {
+          url: "http://127.0.0.1:8787/status",
+          method: "GET",
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      process.env.HABITAT_API_BASE_URL = previousBaseUrl;
+    }
+  });
+
+  test("API client defaults to localhost:8787 when HABITAT_API_BASE_URL is unset", async () => {
+    const previousBaseUrl = process.env.HABITAT_API_BASE_URL;
+    delete process.env.HABITAT_API_BASE_URL;
+
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; method?: string }> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: typeof input === "string" ? input : input.toString(),
+        method: init?.method,
+      });
+
+      return Response.json({
+        registration: null,
+        modules: [],
+      });
+    }) as typeof fetch;
+
+    try {
+      const { createHabitatApiClient } = await import("../src/api-client");
+      const client = createHabitatApiClient();
+      await client.getStatus();
+
+      expect(calls).toEqual([
+        {
+          url: "http://localhost:8787/status",
+          method: "GET",
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      process.env.HABITAT_API_BASE_URL = previousBaseUrl;
+    }
+  });
+
+  test("API client routes health, catalog, and heartbeat calls through HABITAT_API_BASE_URL", async () => {
+    const previousBaseUrl = process.env.HABITAT_API_BASE_URL;
+    process.env.HABITAT_API_BASE_URL = "http://127.0.0.1:8787";
+
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; method?: string }> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: typeof input === "string" ? input : input.toString(),
+        method: init?.method,
+      });
+
+      const url = typeof input === "string" ? input : input.toString();
+
+      if (url.endsWith("/health")) {
+        return Response.json({ health: { ok: true } });
+      }
+
+      if (url.endsWith("/catalog/modules")) {
+        return Response.json({ modules: [] });
+      }
+
+      if (url.endsWith("/heartbeat")) {
+        return Response.json({ heartbeat: { ok: true } });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      const { createHabitatApiClient } = await import("../src/api-client");
+      const client = createHabitatApiClient();
+
+      expect((await client.getHealth()).health).toEqual({ ok: true });
+      expect((await client.listModuleCatalog()).modules).toEqual([]);
+      expect((await client.sendHeartbeat()).heartbeat).toEqual({ ok: true });
+      expect(calls).toEqual([
+        { url: "http://127.0.0.1:8787/health", method: "GET" },
+        { url: "http://127.0.0.1:8787/catalog/modules", method: "GET" },
+        { url: "http://127.0.0.1:8787/heartbeat", method: "POST" },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      process.env.HABITAT_API_BASE_URL = previousBaseUrl;
+    }
+  });
+
+  test("GET /server/logs returns recent Habitat API request logs", async () => {
+    process.chdir(workdir);
+    const { createApp } = await import("../src/server/app");
+    const app = createApp();
+
+    await app.request("/registration");
+    const response = await app.request("/server/logs");
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(payload.logs)).toBe(true);
+    expect(payload.logs.some((entry: { message?: string; path?: string }) => entry.message === "GET /registration" && entry.path === "/registration")).toBe(true);
+  });
+
+  test("status rendering uses the modules returned by the local Habitat API", async () => {
+    process.chdir(workdir);
+    const previousDisable = process.env.HABITAT_DISABLE_LOCAL_API;
+    delete process.env.HABITAT_DISABLE_LOCAL_API;
+    const previousBaseUrl = process.env.HABITAT_API_BASE_URL;
+    process.env.HABITAT_API_BASE_URL = "http://127.0.0.1:8787";
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+
+      if (!url.endsWith("/status")) {
+        throw new Error(`Unexpected URL: ${url}`);
+      }
+
+      return Response.json({
+        registration: {
+          habitatId: "habitat-server-123",
+          habitatUuid: "11111111-1111-4111-8111-111111111111",
+          displayName: "Artemis Ridge",
+          status: "online",
+        },
+        modules: [
+          {
+            id: "starter-command-module",
+            blueprintId: "command-module",
+            displayName: "Command Module",
+            connectedTo: [],
+            runtimeAttributes: {
+              status: "active",
+            },
+            capabilities: ["habitat-command"],
+            source: "starter",
+          },
+        ],
+      });
+    }) as typeof fetch;
+
+    const originalLog = console.log;
+    const renderedLines: string[] = [];
+    console.log = (...args: unknown[]) => {
+      renderedLines.push(args.map((value) => String(value)).join(" "));
+    };
+
+    const { runCli } = await import("../src/commands");
+
+    try {
+      await runCli(["bun", "habitat", "status"]);
+
+      const output = renderedLines.join("\n");
+      expect(output).toContain("Modules: 1");
+      expect(output).toContain("Command Module");
+      expect(output).not.toContain("No modules found.");
+    } finally {
+      globalThis.fetch = originalFetch;
+      console.log = originalLog;
+      process.env.HABITAT_API_BASE_URL = previousBaseUrl;
+      process.env.HABITAT_DISABLE_LOCAL_API = previousDisable;
+    }
+  });
+
+  test("connect saves the local Habitat API base URL for later commands", async () => {
+    process.chdir(workdir);
+    const { runCli } = await import("../src/commands");
+
+    const originalLog = console.log;
+    const renderedLines: string[] = [];
+    console.log = (...args: unknown[]) => {
+      renderedLines.push(args.map((value) => String(value)).join(" "));
+    };
+
+    try {
+      await runCli(["bun", "habitat", "connect", "http://127.0.0.1:18787"]);
+
+      expect(renderedLines.join("\n")).toContain("Connected to http://127.0.0.1:18787.");
+      expect(readData()).toMatchObject({
+        habitatApiBaseUrl: "http://127.0.0.1:18787",
+      });
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
+  test("API client reads the saved Habitat API base URL when the env var is unset", async () => {
+    process.chdir(workdir);
+    writeData({
+      habitatApiBaseUrl: "http://127.0.0.1:18787",
+    });
+
+    const previousBaseUrl = process.env.HABITAT_API_BASE_URL;
+    delete process.env.HABITAT_API_BASE_URL;
+
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; method?: string }> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: typeof input === "string" ? input : input.toString(),
+        method: init?.method,
+      });
+
+      return Response.json({
+        registration: null,
+        modules: [],
+      });
+    }) as typeof fetch;
+
+    try {
+      const { createHabitatApiClient } = await import("../src/api-client");
+      const client = createHabitatApiClient();
+      await client.getStatus();
+
+      expect(calls).toEqual([
+        {
+          url: "http://127.0.0.1:18787/status",
+          method: "GET",
+        },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      process.env.HABITAT_API_BASE_URL = previousBaseUrl;
+    }
+  });
 });
 
 describe("Kepler habitat registration commands", () => {

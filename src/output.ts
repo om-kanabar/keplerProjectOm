@@ -1,7 +1,6 @@
 import type { ConstructionReadiness } from "./construction";
 import { formatBlueprintOutput, formatBlueprintValue, getBlueprintRequiredFacility } from "./blueprints";
 import { getModulePowerDrawKw } from "./tick";
-import { listModules, moduleCount } from "./modules";
 import {
   BatteryRechargeResult,
   BlueprintReference,
@@ -12,7 +11,10 @@ import {
   TickSimulationResult,
 } from "./types";
 
-export function printKeplerRegistration(registration: KeplerRegistration | undefined): void {
+export function printKeplerRegistration(
+  registration: KeplerRegistration | undefined,
+  modules: HabitatModule[] = [],
+): void {
   console.log("Kepler Registration");
 
   if (!registration) {
@@ -40,8 +42,8 @@ export function printKeplerRegistration(registration: KeplerRegistration | undef
     console.log(`  Last Seen: ${registration.lastSeenAt}`);
   }
 
-  console.log(`  Modules: ${moduleCount()}`);
-  printModuleList(listModules());
+  console.log(`  Modules: ${modules.length}`);
+  printModuleList(modules);
 }
 
 export function printModuleList(modules: HabitatModule[]): void {

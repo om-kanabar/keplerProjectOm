@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { createHabitatApiClient, normalizeHabitatApiBaseUrl } from "./api-client";
 import { getBlueprint, listBlueprints } from "./blueprints";
 import { cancelConstruction, inspectConstructionReadiness, listConstructionJobs, startConstruction } from "./construction";
 import { addInventory, listInventory } from "./inventory";
@@ -41,10 +42,16 @@ import {
 } from "./output";
 import { RuntimeAttributes } from "./types";
 import { getModulePowerDrawKw } from "./tick";
+import { readData, writeData } from "./storage";
 
 export async function runCli(argv: string[]): Promise<void> {
   const jsonMode = argv.includes("--json");
   let jsonResponse: unknown;
+  const apiClient = createHabitatApiClient();
+
+  function shouldUseHabitatApi(): boolean {
+    return process.env.HABITAT_DISABLE_LOCAL_API !== "1";
+  }
 
   function fail(message: string): never {
     if (jsonMode) {
@@ -357,7 +364,9 @@ export async function runCli(argv: string[]): Promise<void> {
     )
     .action(async (options: { name: string }) => {
       try {
-        const registration = await registerWithKepler(options.name);
+        const registration = shouldUseHabitatApi()
+          ? (await apiClient.register(options.name)).registration
+          : await registerWithKepler(options.name);
         respond({ registration }, () => {
           console.log(`Registered habitat "${registration.displayName}".`);
           console.log(`Habitat ID: ${registration.habitatId}`);
@@ -373,10 +382,11 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Show live Kepler registration status and local simulation modules.")
     .action(async () => {
       try {
-        const registration = await fetchKeplerRegistration();
-        const modules = listModules();
+        const { registration, modules } = shouldUseHabitatApi()
+          ? await apiClient.getStatus()
+          : { registration: await fetchKeplerRegistration(), modules: listModules() };
         respond({ registration, modules }, () => {
-          printKeplerRegistration(registration);
+          printKeplerRegistration(registration ?? undefined, modules);
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "Unable to read Kepler status.");
@@ -389,6 +399,20 @@ export async function runCli(argv: string[]): Promise<void> {
   const constructionCommand = program.command("construction").description("Inspect and manage local construction jobs.");
   const inventoryCommand = program.command("inventory").description("Inspect and manage local inventory.");
   const resourceCommand = program.command("resource").description("Inspect the Kepler resource catalog.");
+  const serverCommand = program.command("server").description("Inspect the local Habitat API server.");
+  program
+    .command("connect")
+    .description("Save the local Habitat API base URL for future commands.")
+    .argument("<baseUrl>", "local Habitat API base URL")
+    .action((baseUrl: string) => {
+      const normalizedBaseUrl = normalizeHabitatApiBaseUrl(baseUrl);
+      writeData({
+        ...readData(),
+        habitatApiBaseUrl: normalizedBaseUrl,
+      });
+
+      console.log(`Connected to ${normalizedBaseUrl}.`);
+    });
   const unlocksCommand = program.command("unlocks").description("Report local unlock-relevant state to Kepler.");
   const worldCommand = program.command("world").description("Inspect Kepler world state.");
   const batteryCommand = moduleCommand.command("battery").description("Recharge module batteries.");
@@ -398,7 +422,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Check the Kepler server health endpoint.")
     .action(async () => {
       try {
-        const health = await fetchKeplerHealth();
+        const health = shouldUseHabitatApi() ? (await apiClient.getHealth()).health : await fetchKeplerHealth();
         respond({ health }, () => {
           printServerRecord("Kepler Health", health);
         });
@@ -412,7 +436,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Show the Kepler server version.")
     .action(async () => {
       try {
-        const version = await fetchKeplerVersion();
+        const version = shouldUseHabitatApi() ? (await apiClient.getVersion()).version : await fetchKeplerVersion();
         respond({ version }, () => {
           printServerRecord("Kepler Version", version);
         });
@@ -426,7 +450,9 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Show the current Kepler world solar irradiance.")
     .action(async () => {
       try {
-        const solarIrradiance = await fetchSolarIrradiance();
+        const solarIrradiance = shouldUseHabitatApi()
+          ? (await apiClient.getSolarIrradiance()).solarIrradiance
+          : await fetchSolarIrradiance();
         respond({ solarIrradiance }, () => {
           printServerRecord("Solar Irradiance", solarIrradiance);
         });
@@ -440,7 +466,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("List the live Kepler module catalog.")
     .action(async () => {
       try {
-        const modules = await fetchKeplerModuleCatalog();
+        const modules = shouldUseHabitatApi() ? (await apiClient.listModuleCatalog()).modules : await fetchKeplerModuleCatalog();
         respond({ modules }, () => {
           printServerCollection("Catalog Modules", modules, ["displayName", "moduleType", "status", "id"]);
         });
@@ -454,7 +480,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("List the live Kepler resource catalog.")
     .action(async () => {
       try {
-        const resources = await listResources();
+        const resources = shouldUseHabitatApi() ? (await apiClient.listCatalogResources()).resources : await listResources();
         respond({ resources }, () => {
           printResourceList(resources);
         });
@@ -468,7 +494,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("List the live Kepler blueprint catalog.")
     .action(async () => {
       try {
-        const blueprints = await listBlueprints();
+        const blueprints = shouldUseHabitatApi() ? (await apiClient.listBlueprints()).blueprints : await listBlueprints();
         respond({ blueprints }, () => {
           printBlueprintList(blueprints);
         });
@@ -482,7 +508,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("List the live Kepler site type catalog.")
     .action(async () => {
       try {
-        const siteTypes = await fetchKeplerSiteTypeCatalog();
+        const siteTypes = shouldUseHabitatApi() ? (await apiClient.listSiteTypes()).siteTypes : await fetchKeplerSiteTypeCatalog();
         respond({ siteTypes }, () => {
           printServerCollection("Catalog Site Types", siteTypes, ["displayName", "siteType", "status", "id"]);
         });
@@ -496,7 +522,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("List the live Kepler unlock catalog.")
     .action(async () => {
       try {
-        const unlocks = await fetchKeplerUnlockCatalog();
+        const unlocks = shouldUseHabitatApi() ? (await apiClient.listUnlocks()).unlocks : await fetchKeplerUnlockCatalog();
         respond({ unlocks }, () => {
           printServerCollection("Catalog Unlocks", unlocks, ["displayName", "unlockId", "status", "id"]);
         });
@@ -508,8 +534,8 @@ export async function runCli(argv: string[]): Promise<void> {
   moduleCommand
     .command("list")
     .description("List local habitat modules.")
-    .action(() => {
-      const modules = listModules();
+    .action(async () => {
+      const modules = shouldUseHabitatApi() ? (await apiClient.listModules()).modules : listModules();
       respond({ modules }, () => {
         printModuleList(modules);
       });
@@ -520,7 +546,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("List the live Kepler blueprint catalog.")
     .action(async () => {
       try {
-        const blueprints = await listBlueprints();
+        const blueprints = shouldUseHabitatApi() ? (await apiClient.listBlueprints()).blueprints : await listBlueprints();
         respond({ blueprints }, () => {
           printBlueprintList(blueprints);
         });
@@ -535,7 +561,9 @@ export async function runCli(argv: string[]): Promise<void> {
     .argument("<blueprintId>", "blueprint id")
     .action(async (blueprintId: string) => {
       try {
-        const blueprint = await getBlueprint(blueprintId);
+        const blueprint = shouldUseHabitatApi()
+          ? (await apiClient.getBlueprint(blueprintId)).blueprint
+          : await getBlueprint(blueprintId);
         respond({ blueprint }, () => {
           printBlueprintDetails(blueprint);
         });
@@ -549,7 +577,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("List the live Kepler resource catalog with local amounts.")
     .action(async () => {
       try {
-        const resources = await listResourcesWithInventory();
+        const resources = shouldUseHabitatApi() ? (await apiClient.listResources()).resources : await listResourcesWithInventory();
         respond({ resources }, () => {
           printResourceList(resources);
         });
@@ -563,7 +591,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Report the current local habitat heartbeat to Kepler.")
     .action(async () => {
       try {
-        const heartbeat = await sendHabitatHeartbeat();
+        const heartbeat = shouldUseHabitatApi() ? (await apiClient.sendHeartbeat()).heartbeat : await sendHabitatHeartbeat();
         respond({ heartbeat }, () => {
           printServerRecord("Heartbeat Response", heartbeat);
         });
@@ -577,7 +605,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Report the current local habitat summary to Kepler.")
     .action(async () => {
       try {
-        const summary = await sendHabitatSummary();
+        const summary = shouldUseHabitatApi() ? (await apiClient.sendSummary()).summary : await sendHabitatSummary();
         respond({ summary }, () => {
           printServerRecord("Summary Response", summary);
         });
@@ -591,12 +619,26 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Report local unlock-relevant state to Kepler.")
     .action(async () => {
       try {
-        const report = await reportHabitatUnlocks();
+        const report = shouldUseHabitatApi() ? (await apiClient.reportUnlocks()).report : await reportHabitatUnlocks();
         respond({ report }, () => {
           printServerRecord("Unlock Report Response", report);
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "Unable to report habitat unlocks.");
+      }
+    });
+
+  serverCommand
+    .command("log")
+    .description("Show recent Habitat API server logs.")
+    .action(async () => {
+      try {
+        const logs = (await apiClient.getServerLogs()).logs;
+        respond({ logs }, () => {
+          printServerCollection("Server Logs", logs, ["timestamp", "level", "message", "method", "path", "statusCode"]);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read Habitat API server logs.");
       }
     });
 
@@ -607,21 +649,25 @@ export async function runCli(argv: string[]): Promise<void> {
     .argument("[amount]", "amount to add")
     .action(async (resourceId: string, amount?: string) => {
       try {
-        requireOnlineBatteryForMutation();
-        requireOnlineSupplyCache();
+        if (!shouldUseHabitatApi()) {
+          requireOnlineBatteryForMutation();
+          requireOnlineSupplyCache();
+        }
 
         if (amount === undefined) {
-          const result = await addResourcesForBlueprint(resourceId);
+          const result = shouldUseHabitatApi() ? await apiClient.addResource(resourceId) : await addResourcesForBlueprint(resourceId);
           respond({ inventory: result.inventory, blueprint: result.blueprint, requiredResources: result.requiredResources }, () => {
-            console.log(`Added required resources for "${result.blueprint.blueprintId}".`);
-            for (const [requiredResourceId, requiredAmount] of Object.entries(result.requiredResources)) {
+            console.log(`Added required resources for "${result.blueprint!.blueprintId}".`);
+            for (const [requiredResourceId, requiredAmount] of Object.entries(result.requiredResources!)) {
               console.log(`${requiredResourceId}: ${requiredAmount}`);
             }
           });
           return;
         }
 
-        const inventory = await addResource(resourceId, parsePositiveInteger(amount, "Resource amount"));
+        const inventory = shouldUseHabitatApi()
+          ? (await apiClient.addResource(resourceId, parsePositiveInteger(amount, "Resource amount"))).inventory
+          : await addResource(resourceId, parsePositiveInteger(amount, "Resource amount"));
         respond({ inventory }, () => {
           console.log(`Added ${amount} ${resourceId}.`);
         });
@@ -633,8 +679,8 @@ export async function runCli(argv: string[]): Promise<void> {
   inventoryCommand
     .command("list")
     .description("List local inventory.")
-    .action(() => {
-      const inventory = listInventory();
+    .action(async () => {
+      const inventory = shouldUseHabitatApi() ? (await apiClient.listInventory()).inventory : listInventory();
       respond({ inventory }, () => {
         printInventoryList(inventory);
       });
@@ -645,10 +691,14 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Add local inventory.")
     .argument("<resourceId>", "resource id")
     .argument("<amount>", "amount to add")
-    .action((resourceId: string, amount: string) => {
+    .action(async (resourceId: string, amount: string) => {
       try {
-        requireOnlineBatteryForMutation();
-        const inventory = addInventory(resourceId, parsePositiveInteger(amount, "Inventory amount"));
+        if (!shouldUseHabitatApi()) {
+          requireOnlineBatteryForMutation();
+        }
+        const inventory = shouldUseHabitatApi()
+          ? (await apiClient.addInventory(resourceId, parsePositiveInteger(amount, "Inventory amount"))).inventory
+          : addInventory(resourceId, parsePositiveInteger(amount, "Inventory amount"));
         respond({ inventory }, () => {
           console.log(`Added ${amount} ${resourceId}.`);
         });
@@ -665,14 +715,18 @@ export async function runCli(argv: string[]): Promise<void> {
     .action(async (blueprintId: string, options: { dryRun?: boolean }) => {
       try {
         if (options.dryRun) {
-          const readiness = await inspectConstructionReadiness(blueprintId);
+          const readiness = shouldUseHabitatApi()
+            ? (await apiClient.inspectConstructionReadiness(blueprintId)).readiness
+            : await inspectConstructionReadiness(blueprintId);
           respond({ readiness }, () => {
             printConstructionDryRun(readiness);
           });
           return;
         }
 
-        const result = await startConstruction(blueprintId);
+        const result = shouldUseHabitatApi()
+          ? (await apiClient.startConstruction(blueprintId)).construction
+          : await startConstruction(blueprintId);
         respond({ construction: result }, () => {
           printConstructionStarted({
             blueprintId,
@@ -689,12 +743,14 @@ export async function runCli(argv: string[]): Promise<void> {
   constructionCommand
     .command("status")
     .description("List active local construction jobs.")
-    .action(() => {
-      const jobs = listConstructionJobs().map(({ facility, job }) => ({
-        facility,
-        blueprintId: job.blueprintId,
-        remainingTicks: job.remainingTicks,
-      }));
+    .action(async () => {
+      const jobs = shouldUseHabitatApi()
+        ? (await apiClient.listConstructionJobs()).jobs
+        : listConstructionJobs().map(({ facility, job }) => ({
+            facility,
+            blueprintId: job.blueprintId,
+            remainingTicks: job.remainingTicks,
+          }));
 
       respond({ jobs }, () => {
         printConstructionStatus(jobs);
@@ -705,9 +761,11 @@ export async function runCli(argv: string[]): Promise<void> {
     .command("cancel")
     .description("Cancel the active construction job on a fabrication module.")
     .argument("<moduleId>", "module id")
-    .action((moduleId: string) => {
+    .action(async (moduleId: string) => {
       try {
-        const result = cancelConstruction(moduleId);
+        const result = shouldUseHabitatApi()
+          ? (await apiClient.cancelConstruction(moduleId)).canceled
+          : cancelConstruction(moduleId);
         respond({ canceled: result }, () => {
           printConstructionCanceled(result.facility.displayName, result.job.blueprintId);
         });
@@ -721,17 +779,29 @@ export async function runCli(argv: string[]): Promise<void> {
     .alias("info")
     .description("Show one local habitat module.")
     .argument("<moduleId>", "module id")
-    .action((moduleId: string) => {
-      runModuleDetailsCommand(moduleId);
+    .action(async (moduleId: string) => {
+      if (!shouldUseHabitatApi()) {
+        runModuleDetailsCommand(moduleId);
+        return;
+      }
+
+      try {
+        const module = (await apiClient.getModule(moduleId)).module;
+        respond({ module }, () => {
+          printModuleDetails(module);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to read module.");
+      }
     });
 
   moduleCommand
     .command("status")
     .description("Show runtime status and current power draw for one local habitat module.")
     .argument("<moduleId>", "module id")
-    .action((moduleId: string) => {
+    .action(async (moduleId: string) => {
       try {
-        const module = getModule(moduleId);
+        const module = shouldUseHabitatApi() ? (await apiClient.getModule(moduleId)).module : getModule(moduleId);
         respond(
           {
             moduleId: module.id,
@@ -752,9 +822,11 @@ export async function runCli(argv: string[]): Promise<void> {
     .description("Set one local habitat module to a runtime status.")
     .argument("<moduleId>", "module id")
     .argument("<status>", "runtime status")
-    .action((moduleId: string, status: string) => {
+    .action(async (moduleId: string, status: string) => {
       try {
-        const module = setModuleStatus(moduleId, status);
+        const module = shouldUseHabitatApi()
+          ? (await apiClient.setModuleStatus(moduleId, status)).module
+          : setModuleStatus(moduleId, status);
         respond(
           {
             moduleId: module.id,
@@ -784,7 +856,7 @@ export async function runCli(argv: string[]): Promise<void> {
     .option("--remove-capability <capability>", "capability to remove", collectValues, [])
     .option("--runtime-attributes <json>", "runtime attributes JSON object")
     .action(
-      (
+      async (
         moduleId: string,
         options: {
           name?: string;
@@ -799,7 +871,7 @@ export async function runCli(argv: string[]): Promise<void> {
         },
       ) => {
         try {
-          const module = updateModule(moduleId, {
+          const input = {
             displayName: options.name,
             status: options.status ?? options.setStatus,
             condition: parseOptionalNumber(options.condition, "Condition"),
@@ -811,7 +883,10 @@ export async function runCli(argv: string[]): Promise<void> {
               options.runtimeAttributes === undefined
                 ? undefined
                 : parseJsonObject(options.runtimeAttributes, "Runtime attributes"),
-          });
+          };
+          const module = shouldUseHabitatApi()
+            ? await apiClient.updateModule(moduleId, input as Record<string, unknown>).then((result) => result.module)
+            : updateModule(moduleId, input);
           respond({ module }, () => {
             console.log(`Updated module "${module.displayName}".`);
             console.log(`ID: ${module.id}`);
@@ -826,9 +901,11 @@ export async function runCli(argv: string[]): Promise<void> {
     .command("delete")
     .description("Delete a local habitat module.")
     .argument("<moduleId>", "module id")
-    .action((moduleId: string) => {
+    .action(async (moduleId: string) => {
       try {
-        const module = deleteModule(moduleId);
+        const module = shouldUseHabitatApi()
+          ? (await apiClient.deleteModule(moduleId)).module
+          : deleteModule(moduleId);
         respond({ module }, () => {
           console.log(`Deleted module "${module.displayName}".`);
           console.log(`ID: ${module.id}`);
@@ -855,14 +932,18 @@ export async function runCli(argv: string[]): Promise<void> {
         "",
       ].join("\n"),
     )
-    .action((ticks: string, unit?: string) => {
+    .action(async (ticks: string, unit?: string) => {
       try {
-        requireOnlineBatteryForMutation();
+        if (!shouldUseHabitatApi()) {
+          requireOnlineBatteryForMutation();
+        }
         const rechargeTicks =
           unit === "hour" || unit === "hours"
             ? parsePositiveInteger(ticks, "Recharge tick count") * 3600
             : parsePositiveInteger(ticks, "Recharge tick count");
-        const recharge = runBatteryRechargeSimulation(rechargeTicks);
+        const recharge = shouldUseHabitatApi()
+          ? (await apiClient.rechargeBattery(rechargeTicks)).recharge
+          : runBatteryRechargeSimulation(rechargeTicks);
         respond({ recharge }, () => {
           printBatteryRechargeResult(recharge);
         });
@@ -893,11 +974,14 @@ export async function runCli(argv: string[]): Promise<void> {
     )
     .action(async (count: string, unit?: string) => {
       try {
-        requireOnlineBatteryForMutation();
-        const tick =
+        if (!shouldUseHabitatApi()) {
+          requireOnlineBatteryForMutation();
+        }
+        const requestedTicks =
           unit === "hour" || unit === "hours"
-            ? await runTickSimulation(parsePositiveInteger(count, "Tick count") * 3600)
-            : await runTickSimulation(parsePositiveInteger(count, "Tick count"));
+            ? parsePositiveInteger(count, "Tick count") * 3600
+            : parsePositiveInteger(count, "Tick count");
+        const tick = shouldUseHabitatApi() ? (await apiClient.tick(requestedTicks)).tick : await runTickSimulation(requestedTicks);
         respond({ tick }, () => {
           printTickResult(tick);
         });
@@ -923,7 +1007,9 @@ export async function runCli(argv: string[]): Promise<void> {
     )
     .action(async () => {
       try {
-        const registration = await unregisterFromKepler();
+        const registration = shouldUseHabitatApi()
+          ? (await apiClient.unregister()).registration
+          : await unregisterFromKepler();
         respond({ registration }, () => {
           console.log(`Unregistered habitat "${registration.displayName}".`);
           console.log(`Habitat ID: ${registration.habitatId}`);
