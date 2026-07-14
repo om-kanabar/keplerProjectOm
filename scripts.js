@@ -53,7 +53,7 @@ function selectDashboardTab(selectedTab) {
 selectDashboardTab('overview');
 
 const habitatFacts = [
-    'Cupola is monitoring the first permanent habitat on Kepler-442b.',
+    'Habitat is monitoring the first permanent habitat on Kepler-442b.',
     'One habitat tick is one second. Time flies, even on another planet.',
     'Battery bank: 420 kWh of storage. That is a lot of “current” company.',
     'A blueprint is a plan. A module is the plan with walls.',
@@ -113,7 +113,7 @@ function formatCommitAge(commitDate) {
     return `about ${days} days ago`;
 }
 
-async function startCupola() {
+async function startHabitat() {
     const minimumLoadingTime = new Promise((resolve) => {
         window.setTimeout(resolve, 1000);
     });
@@ -156,4 +156,4 @@ async function startCupola() {
     }
 }
 
-startCupola();
+startHabitat();

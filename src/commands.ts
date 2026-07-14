@@ -76,7 +76,7 @@ export async function runCli(argv: string[]): Promise<void> {
     if (args[0] === "register") {
       return [
         'Usage: habitat register --name "<habitat name>"',
-        'Example: habitat register --name "Cupola"',
+        'Example: habitat register --name "Habitat"',
       ].join("\n");
     }
 
@@ -336,7 +336,7 @@ export async function runCli(argv: string[]): Promise<void> {
       "  KEPLER_WORLD_BASE_URL or PLANET_SERVER_PUBLIC_BASE_URL",
       "",
       "Examples:",
-      '  habitat register --name "Cupola"',
+      '  habitat register --name "Habitat"',
       "  habitat status",
       "  habitat module list",
       "  habitat module battery recharge 500",
@@ -358,7 +358,7 @@ export async function runCli(argv: string[]): Promise<void> {
         '  habitat register --name "<habitat name>"',
         "",
         "Example:",
-        '  habitat register --name "Cupola"',
+        '  habitat register --name "Habitat"',
         "",
       ].join("\n"),
     )
