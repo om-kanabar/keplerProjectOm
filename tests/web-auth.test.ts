@@ -29,6 +29,19 @@ describe("web authentication", () => {
     });
   });
 
+  test("allows only one unused code within five minutes", async () => {
+    process.env.KEPLER_WORLD_TOKEN = "test-kepler-token";
+    const { createApp } = await import("../src/server/app");
+    const app = createApp();
+    const headers = { Authorization: "Bearer test-kepler-token" };
+
+    const firstResponse = await app.request("/auth/web", { method: "POST", headers });
+    const secondResponse = await app.request("/auth/web", { method: "POST", headers });
+
+    expect(firstResponse.status).toBe(201);
+    expect(secondResponse.status).toBe(429);
+  });
+
   test("exchanges a code once and sets a browser session cookie", async () => {
     process.env.KEPLER_WORLD_TOKEN = "test-kepler-token";
     const { createApp } = await import("../src/server/app");
@@ -47,6 +60,20 @@ describe("web authentication", () => {
 
     expect(verifyResponse.status).toBe(200);
     expect(verifyResponse.headers.get("Set-Cookie")).toContain("HttpOnly");
+    const sessionCookie = verifyResponse.headers.get("Set-Cookie")?.split(";")[0];
+
+    const sessionResponse = await app.request("/auth/web/session", {
+      headers: { Cookie: sessionCookie ?? "" },
+    });
+
+    expect(sessionResponse.status).toBe(200);
+    expect(await sessionResponse.json()).toEqual({ authenticated: true });
+
+    const nextCodeResponse = await app.request("/auth/web", {
+      method: "POST",
+      headers: { Authorization: "Bearer test-kepler-token" },
+    });
+    expect(nextCodeResponse.status).toBe(201);
 
     const reusedResponse = await app.request("/auth/web/verify", {
       method: "POST",

@@ -15,6 +15,7 @@
     <link href="https://fonts.cdnfonts.com/css/glacial-indifference-2" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <script src="loading.js" defer></script>
+    <script src="app.js" defer></script>
 </head>
 <body>
     <div class="loading" id="loading-screen" role="status" aria-label="Loading Habitat">
@@ -26,6 +27,33 @@
         </div>
         <p class="loading-error" id="loading-error" role="alert">AN ERROR OCCURRED: UNABLE TO REACH BUILD SERVER</p>
     </div>
+    <main class="auth-page" aria-labelledby="auth-title" hidden>
+        <section class="auth-panel">
+            <p class="auth-kicker">HABITAT / TERMINAL AUTH</p>
+            <h1 id="auth-title">Enter auth code<br>from terminal.</h1>
+            <p class="auth-copy">Run this in your terminal, then paste the one-time code here.</p>
+            <code class="auth-command">habitat auth web</code>
+            <form id="web-auth-form" class="auth-form">
+                <label for="web-login-code">Auth code</label>
+                <div class="auth-input-row">
+                    <input id="web-login-code" name="code" type="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required>
+                    <button type="submit">Continue</button>
+                </div>
+                <p id="web-auth-error" class="auth-error" role="alert"></p>
+            </form>
+        </section>
+    </main>
+    <main class="dashboard-shell" aria-labelledby="dashboard-title" hidden>
+        <header class="dashboard-shell-header">
+            <a class="dashboard-brand" href="/">HABITAT</a>
+            <span class="dashboard-shell-status"><span class="status-light"></span>OPERATOR AUTHENTICATED</span>
+        </header>
+        <section class="dashboard-shell-content">
+            <p class="eyebrow">KEPLER-442B / MISSION CONTROL</p>
+            <h1 id="dashboard-title">Habitat<br><em>online.</em></h1>
+            <p>Your authenticated command center is ready for the new operational dashboard.</p>
+        </section>
+    </main>
     <footer class="site-footer mt-2">
         <span>&nbsp;</span>
         <p class="build-commit">Build&nbsp;<a id="build-commit">UNKNOWN</a>&nbsp;from&nbsp;<span id="time-commit">UNKNOWN</span></p>

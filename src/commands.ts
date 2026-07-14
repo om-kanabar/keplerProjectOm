@@ -449,7 +449,7 @@ export async function runCli(argv: string[]): Promise<void> {
         const login = await apiClient.createWebLoginCode(getKeplerToken());
         respond(login, () => {
           console.log(`Web login code: ${login.code}`);
-          console.log(`Expires at: ${login.expiresAt}`);
+          console.log(`Expires at: ${formatWebLoginExpiry(login.expiresAt)}.`);
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "Unable to create a web login code.");
@@ -1074,6 +1074,22 @@ export async function runCli(argv: string[]): Promise<void> {
 
     throw error;
   }
+}
+
+function formatWebLoginExpiry(expiresAt: string): string {
+  const expiry = new Date(expiresAt);
+  if (Number.isNaN(expiry.getTime())) {
+    return "an unknown time";
+  }
+
+  const time = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(expiry);
+  const minutes = Math.max(1, Math.ceil((expiry.getTime() - Date.now()) / 60000));
+
+  return `${time} (in about ${minutes} minute${minutes === 1 ? "" : "s"})`;
 }
 
 function requireOnlineBatteryForMutation(): void {

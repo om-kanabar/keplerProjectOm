@@ -25,6 +25,7 @@ const staticFiles: Record<string, string> = {
   "/styles.css": "styles.css",
   "/scripts.js": "scripts.js",
   "/loading.js": "loading.js",
+  "/app.js": "app.js",
 };
 
 async function fetchRequest(request: Request): Promise<Response> {
