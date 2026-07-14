@@ -17,11 +17,36 @@ function readPort(): number {
 
 const host = readHost();
 const port = readPort();
+const api = createApp();
+
+const staticFiles: Record<string, string> = {
+  "/": "index.html",
+  "/index.html": "index.html",
+  "/styles.css": "styles.css",
+  "/scripts.js": "scripts.js",
+  "/loading.js": "loading.js",
+};
+
+async function fetchRequest(request: Request): Promise<Response> {
+  const pathname = new URL(request.url).pathname;
+  const fileName = staticFiles[pathname];
+
+  if (request.method === "GET" && fileName) {
+    const file = (Bun as unknown as {
+      file(path: string): { exists(): Promise<boolean> } & BodyInit;
+    }).file(fileName);
+    if (await file.exists()) {
+      return new Response(file);
+    }
+  }
+
+  return api.fetch(request);
+}
 
 const server = Bun.serve({
   hostname: host,
   port,
-  fetch: createApp().fetch,
+  fetch: fetchRequest,
 });
 
 appendServerLog({
