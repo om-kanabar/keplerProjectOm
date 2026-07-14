@@ -4,15 +4,13 @@ import { readFileSync } from "node:fs";
 const root = new URL("..", import.meta.url);
 const readProjectFile = (path: string) => readFileSync(new URL(path, root), "utf8");
 
-describe("live dashboard wiring", () => {
-  test("loads live Habitat status before revealing the page", () => {
+describe("loading page restart", () => {
+  test("does not load dashboard wiring while the loading page is retained", () => {
     const html = readProjectFile("index.html");
-    const script = readProjectFile("scripts.js");
-    const server = readProjectFile("src/server/app.ts");
 
-    expect(html).toContain("HABITAT_API_BASE_URL");
-    expect(script).toContain("/status");
-    expect(script).toContain("habitat:ready");
-    expect(server).toContain("hono/cors");
+    expect(html).toContain('src="loading.js"');
+    expect(html).not.toContain("HABITAT_API_BASE_URL");
+    expect(html).not.toContain('src="scripts.js"');
+    expect(html).not.toContain('class="dashboard-content"');
   });
 });

@@ -54,13 +54,16 @@ function getBaseUrl(): string {
   ).replace(/\/+$/, "");
 }
 
-function getToken(): string {
+export function getKeplerToken(): string {
   const token =
-    process.env.KEPLER_WORLD_TOKEN ?? process.env.PLANET_TOKEN ?? process.env.KEPLER_PLANET_TOKEN;
+    process.env.KEPLER_API_KEY ??
+    process.env.KEPLER_WORLD_TOKEN ??
+    process.env.PLANET_TOKEN ??
+    process.env.KEPLER_PLANET_TOKEN;
 
   if (!token) {
     throw new Error(
-      "Kepler token is missing. Set KEPLER_WORLD_TOKEN, PLANET_TOKEN, or KEPLER_PLANET_TOKEN.",
+      "Kepler API key is missing. Set KEPLER_API_KEY, KEPLER_WORLD_TOKEN, PLANET_TOKEN, or KEPLER_PLANET_TOKEN.",
     );
   }
 
@@ -75,7 +78,7 @@ async function requestKepler<T>(
   const response = await fetch(`${getBaseUrl()}${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${getToken()}`,
+      Authorization: `Bearer ${getKeplerToken()}`,
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),

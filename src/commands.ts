@@ -10,6 +10,7 @@ import {
   fetchKeplerSiteTypeCatalog,
   fetchKeplerUnlockCatalog,
   fetchKeplerVersion,
+  getKeplerToken,
   fetchSolarIrradiance,
   registerWithKepler,
   reportHabitatUnlocks,
@@ -336,7 +337,7 @@ export async function runCli(argv: string[]): Promise<void> {
     [
       "",
       "Environment:",
-      "  KEPLER_WORLD_TOKEN, PLANET_TOKEN, or KEPLER_PLANET_TOKEN",
+      "  KEPLER_API_KEY, KEPLER_WORLD_TOKEN, PLANET_TOKEN, or KEPLER_PLANET_TOKEN",
       "  KEPLER_WORLD_BASE_URL or PLANET_SERVER_PUBLIC_BASE_URL",
       "",
       "Examples:",
@@ -347,6 +348,7 @@ export async function runCli(argv: string[]): Promise<void> {
       "  habitat module battery recharge 500",
       "  habitat resource list",
       "  habitat unregister",
+      "  habitat auth web",
       "",
     ].join("\n"),
   );
@@ -425,6 +427,7 @@ export async function runCli(argv: string[]): Promise<void> {
   const inventoryCommand = program.command("inventory").description("Inspect and manage local inventory.");
   const resourceCommand = program.command("resource").description("Inspect the Kepler resource catalog.");
   const serverCommand = program.command("server").description("Inspect the local Habitat API server.");
+  const authCommand = program.command("auth").description("Authenticate with the remote Habitat server.");
   program
     .command("connect")
     .description("Save the local Habitat API base URL for future commands.")
@@ -437,6 +440,20 @@ export async function runCli(argv: string[]): Promise<void> {
       });
 
       console.log(`Connected to ${normalizedBaseUrl}.`);
+    });
+  authCommand
+    .command("web")
+    .description("Create a one-time code for web dashboard login.")
+    .action(async () => {
+      try {
+        const login = await apiClient.createWebLoginCode(getKeplerToken());
+        respond(login, () => {
+          console.log(`Web login code: ${login.code}`);
+          console.log(`Expires at: ${login.expiresAt}`);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to create a web login code.");
+      }
     });
   const unlocksCommand = program.command("unlocks").description("Report local unlock-relevant state to Kepler.");
   const worldCommand = program.command("world").description("Inspect Kepler world state.");

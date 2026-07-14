@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { registerCatalogRoutes } from "./routes/catalog";
 import { registerConstructionRoutes } from "./routes/construction";
 import { registerInventoryRoutes } from "./routes/inventory";
+import { registerAuthRoutes } from "./routes/auth";
 import { appendServerLog, listServerLogs } from "./logs";
 import { registerModuleRoutes } from "./routes/modules";
 import { registerRegistrationRoutes } from "./routes/registration";
@@ -34,6 +35,7 @@ export function createApp(): Hono {
   });
 
   registerRegistrationRoutes(app);
+  registerAuthRoutes(app);
   registerCatalogRoutes(app);
   registerModuleRoutes(app);
   registerInventoryRoutes(app);

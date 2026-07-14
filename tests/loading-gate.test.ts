@@ -5,17 +5,20 @@ const root = new URL("..", import.meta.url);
 const readProjectFile = (path: string) => readFileSync(new URL(path, root), "utf8");
 
 describe("dashboard loading gate", () => {
-  test("keeps the loader independent from dashboard startup", () => {
+  test("keeps only the loading page and build footer during the restart", () => {
     const html = readProjectFile("index.html");
     const loader = readProjectFile("loading.js");
-    const dashboard = readProjectFile("scripts.js");
 
     expect(html.indexOf('src="loading.js"')).toBeGreaterThan(-1);
-    expect(html.indexOf('src="loading.js"')).toBeLessThan(html.indexOf('src="scripts.js"'));
+    expect(html).toContain('id="loading-screen"');
+    expect(html).toContain('<footer class="site-footer mt-2">');
+    expect(html).toContain('id="build-commit"');
+    expect(html).not.toContain('class="main"');
+    expect(html).not.toContain('class="dashboard-sidebar"');
+    expect(html).not.toContain('class="dashboard-content"');
+    expect(html).not.toContain('src="scripts.js"');
     expect(loader).toContain("habitat:ready");
     expect(loader).toContain("is-ready");
     expect(loader).toContain("1500");
-    expect(dashboard).toContain("habitat:ready");
-    expect(dashboard).not.toContain("classList.add('is-ready')");
   });
 });
