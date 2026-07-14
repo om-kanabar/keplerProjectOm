@@ -5,10 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/habitat-cli
 Environment=HABITAT_API_HOST=0.0.0.0
 Environment=HABITAT_API_PORT=8787
-ExecStart=%h/.bun/bin/bun run server
+WorkingDirectory=%h/habitat-cli
+ExecStart=/bin/bash -lc 'bun run server'
 Restart=always
 RestartSec=5
 TimeoutStopSec=10
