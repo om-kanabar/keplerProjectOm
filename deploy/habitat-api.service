@@ -1,12 +1,18 @@
 [Unit]
-Description=Habitat API
+Description=Habitat API server
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=%h/habitat-cli
-ExecStart=/usr/local/bin/bun run server
+Environment=HABITAT_API_HOST=0.0.0.0
+Environment=HABITAT_API_PORT=8787
+ExecStart=%h/.bun/bin/bun run server
 Restart=always
-RestartSec=3
+RestartSec=5
+TimeoutStopSec=10
+NoNewPrivileges=true
 
 [Install]
 WantedBy=default.target
