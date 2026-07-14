@@ -21,12 +21,13 @@ function animateLoadingDots() {
     requestAnimationFrame(update);
 }
 
-function showLoading() {
+function showLoading(dotsOnly = false) {
     if (!loadingScreen) return;
 
     loadingScreen.hidden = false;
     loadingStartedAt = performance.now();
     loadingScreen.classList.remove('is-leaving', 'has-error');
+    loadingScreen.classList.toggle('dots-only', dotsOnly);
     loadingScreen.classList.add('is-returning');
     document.body.classList.remove('auth-required');
 }
@@ -44,7 +45,7 @@ function leaveLoading(afterLeave) {
         loadingScreen.classList.add('is-leaving');
         window.setTimeout(() => {
             loadingScreen.hidden = true;
-            loadingScreen.classList.remove('is-leaving', 'is-returning');
+            loadingScreen.classList.remove('is-leaving', 'is-returning', 'dots-only');
             afterLeave();
         }, 950);
     }, remaining);
@@ -61,7 +62,6 @@ window.addEventListener('habitat:auth-required', () => {
     leaveLoading(() => document.body.classList.add('auth-required'));
 });
 
-window.addEventListener('habitat:auth-pending', showLoading);
 window.addEventListener('habitat:ready', revealDashboard, { once: true });
 window.addEventListener('habitat:startup-error', (event) => {
     const message = event.detail?.message ?? 'DASHBOARD INITIALIZATION FAILED';

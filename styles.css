@@ -561,6 +561,31 @@ body.is-ready .dashboard-shell {
     font: 0.72rem/1.4 'Space Mono', 'Menlo', monospace;
 }
 
+.auth-loading-dots {
+    display: none;
+    width: 100%;
+    justify-content: center;
+    padding: 1rem 0 0.2rem;
+    color: #ede8dd88;
+}
+
+.auth-loading-dots .loading-dots {
+    width: 5.5rem;
+}
+
+.auth-loading-dots .loading-dot {
+    font-size: 2.5rem;
+}
+
+.auth-page.is-verifying .auth-loading-dots {
+    display: flex;
+}
+
+.auth-page.is-verifying .auth-form button {
+    cursor: wait;
+    opacity: 0.5;
+}
+
 @media (max-width: 34rem) {
     .auth-panel {
         width: min(100%, 26rem);
@@ -678,6 +703,15 @@ body.is-ready .dashboard-shell {
 
 .loading.is-returning {
     animation: loadingReturn 500ms ease-out both;
+}
+
+.loading.dots-only .loading-hero {
+    display: none;
+}
+
+.loading.dots-only .loading-status {
+    width: auto;
+    font-size: 1.2rem;
 }
 
 .loading.is-leaving .loading-hero {

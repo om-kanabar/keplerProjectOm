@@ -2,9 +2,11 @@ const authPage = document.querySelector('.auth-page');
 const dashboardShell = document.querySelector('.dashboard-shell');
 const authForm = document.querySelector('#web-auth-form');
 const authCodeInput = document.querySelector('#web-login-code');
+const authSubmit = authForm?.querySelector('button[type="submit"]');
 const authError = document.querySelector('#web-auth-error');
 const buildCommit = document.querySelector('#build-commit');
 const timeCommit = document.querySelector('#time-commit');
+const minimumAuthLoadingTime = 1500;
 
 async function readJson(response) {
     const text = await response.text();
@@ -62,6 +64,9 @@ async function hasWebSession() {
 function showAuthentication() {
     dashboardShell.hidden = true;
     authPage.hidden = false;
+    authPage.classList.remove('is-verifying');
+    if (authCodeInput) authCodeInput.disabled = false;
+    if (authSubmit) authSubmit.disabled = false;
     authCodeInput?.focus();
     window.dispatchEvent(new Event('habitat:auth-required'));
 }
@@ -70,6 +75,14 @@ function showDashboard() {
     authPage.hidden = true;
     dashboardShell.hidden = false;
     window.dispatchEvent(new Event('habitat:ready'));
+}
+
+async function keepAuthLoadingVisible(startedAt) {
+    const elapsed = performance.now() - startedAt;
+    const remaining = Math.max(0, minimumAuthLoadingTime - elapsed);
+    if (remaining > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, remaining));
+    }
 }
 
 async function initializeDashboard() {
@@ -94,7 +107,10 @@ authForm?.addEventListener('submit', async (event) => {
     if (!code) return;
 
     setAuthError();
-    window.dispatchEvent(new Event('habitat:auth-pending'));
+    const verificationStartedAt = performance.now();
+    authPage.classList.add('is-verifying');
+    if (authCodeInput) authCodeInput.disabled = true;
+    if (authSubmit) authSubmit.disabled = true;
 
     try {
         const response = await fetch('/auth/web/verify', {
@@ -104,12 +120,15 @@ authForm?.addEventListener('submit', async (event) => {
             body: JSON.stringify({ code }),
         });
         const body = await readJson(response);
+        await keepAuthLoadingVisible(verificationStartedAt);
 
         if (!response.ok) {
             throw new Error(body.error?.message ?? `Authentication failed (HTTP ${response.status}).`);
         }
         showDashboard();
     } catch (error) {
+        await keepAuthLoadingVisible(verificationStartedAt);
+        if (authCodeInput) authCodeInput.value = '';
         setAuthError(error instanceof Error ? error.message : 'Unable to authenticate.');
         showAuthentication();
     }
