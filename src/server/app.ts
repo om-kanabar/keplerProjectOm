@@ -5,6 +5,7 @@ import { registerInventoryRoutes } from "./routes/inventory";
 import { appendServerLog, listServerLogs } from "./logs";
 import { registerModuleRoutes } from "./routes/modules";
 import { registerRegistrationRoutes } from "./routes/registration";
+import { registerScanRoutes } from "./routes/scan";
 import { fetchKeplerHealth, fetchKeplerModuleCatalog, fetchKeplerSiteTypeCatalog, fetchKeplerUnlockCatalog, fetchKeplerVersion, reportHabitatUnlocks, sendHabitatHeartbeat, sendHabitatSummary } from "../kepler";
 
 export function createApp(): Hono {
@@ -27,6 +28,7 @@ export function createApp(): Hono {
   registerModuleRoutes(app);
   registerInventoryRoutes(app);
   registerConstructionRoutes(app);
+  registerScanRoutes(app);
 
   app.get("/health", async () => Response.json({ health: await fetchKeplerHealth() }));
   app.get("/version", async () => Response.json({ version: await fetchKeplerVersion() }));

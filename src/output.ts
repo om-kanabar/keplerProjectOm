@@ -11,6 +11,26 @@ import {
   TickSimulationResult,
 } from "./types";
 
+export function printScan(scan: Record<string, unknown>): void {
+  const tiles = Array.isArray(scan.tiles) ? scan.tiles as Array<Record<string, unknown>> : [];
+  console.log("Habitat Scan");
+  console.log(`  Origin: ${formatStructuredValue(scan.origin)}`);
+  console.log(`  Sensor Strength: ${formatStructuredValue(scan.sensorStrength)}`);
+  console.log(`  Radius: ${formatStructuredValue(scan.radiusTiles)}`);
+  for (const tile of tiles) {
+    console.log(`  Tile (${formatStructuredValue(tile.x)}, ${formatStructuredValue(tile.y)}) distance=${formatStructuredValue(tile.distance)} terrain=${formatStructuredValue(tile.terrain)}`);
+    if (tiles.length === 1) {
+      console.log("  Resource Probabilities");
+      for (const p of (Array.isArray(tile.probabilities) ? tile.probabilities : []) as Array<Record<string, unknown>>) {
+        console.log(`    ${formatStructuredValue(p.resource ?? p.resourceId ?? p.candidate)}: ${formatStructuredValue(p.probability ?? p.confidence)}%`);
+      }
+    }
+    const estimate = tile.quantityEstimate as Record<string, unknown> | null | undefined;
+    console.log(`  Top Candidate: ${formatStructuredValue(tile.topCandidate)}`);
+    console.log(`  Quantity: ${formatStructuredValue(estimate?.estimatedKilograms ?? estimate?.kilograms)} kg; range ${formatStructuredValue(estimate?.minimumKilograms ?? estimate?.minimum)}-${formatStructuredValue(estimate?.maximumKilograms ?? estimate?.maximum)} kg; exact ${formatStructuredValue(estimate?.exact)}`);
+  }
+}
+
 export function printKeplerRegistration(
   registration: KeplerRegistration | undefined,
   modules: HabitatModule[] = [],

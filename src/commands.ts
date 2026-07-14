@@ -37,6 +37,7 @@ import {
   printResourceList,
   printServerCollection,
   printServerRecord,
+  printScan,
   printStatusChangeConfirmation,
   printTickResult,
 } from "./output";
@@ -82,6 +83,9 @@ export async function runCli(argv: string[]): Promise<void> {
 
     if (args[0] === "status") {
       return ["Usage: habitat status", "Example: habitat status"].join("\n");
+    }
+    if (args[0] === "scan") {
+      return ["Usage: habitat scan --x <integer> --y <integer> --strength <0-100> [--radius <0-5>]", "Example: habitat scan --x 3 --y -2 --strength 60"].join("\n");
     }
 
     if (args[0] === "tick") {
@@ -338,6 +342,7 @@ export async function runCli(argv: string[]): Promise<void> {
       "Examples:",
       '  habitat register --name "Habitat"',
       "  habitat status",
+      "  habitat scan --x 3 --y -2 --strength 60",
       "  habitat module list",
       "  habitat module battery recharge 500",
       "  habitat resource list",
@@ -390,6 +395,26 @@ export async function runCli(argv: string[]): Promise<void> {
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "Unable to read Kepler status.");
+      }
+    });
+
+  program.command("scan")
+    .description("Scan Kepler resource probabilities at a position.")
+    .requiredOption("--x <integer>", "current x coordinate")
+    .requiredOption("--y <integer>", "current y coordinate")
+    .requiredOption("--strength <0-100>", "effective sensor strength")
+    .option("--radius <0-5>", "scan radius in tiles", "0")
+    .action(async (options: { x: string; y: string; strength: string; radius: string }) => {
+      try {
+        const x = Number(options.x), y = Number(options.y), strength = Number(options.strength), radius = Number(options.radius);
+        if (!Number.isInteger(x)) throw new Error("x must be an integer.");
+        if (!Number.isInteger(y)) throw new Error("y must be an integer.");
+        if (!Number.isInteger(strength) || strength < 0 || strength > 100) throw new Error("strength must be an integer between 0 and 100.");
+        if (!Number.isInteger(radius) || radius < 0 || radius > 5) throw new Error("radius must be an integer between 0 and 5.");
+        const scan = await apiClient.scan({ x, y, strength, radius });
+        respond({ scan }, () => printScan(scan));
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to scan habitat.");
       }
     });
 

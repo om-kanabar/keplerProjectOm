@@ -31,6 +31,7 @@ type ConstructionStatusJob = {
   blueprintId: string;
   remainingTicks: number;
 };
+export type ScanOptions = { x: number; y: number; strength: number; radius: number };
 
 export type HabitatApiClient = {
   getRegistration: () => Promise<RegistrationResponse>;
@@ -86,6 +87,7 @@ export type HabitatApiClient = {
   sendSummary: () => Promise<{ summary: Record<string, unknown> }>;
   reportUnlocks: () => Promise<{ report: Record<string, unknown> }>;
   getServerLogs: () => Promise<{ logs: ServerLogEntry[] }>;
+  scan: (options: ScanOptions) => Promise<Record<string, unknown>>;
 };
 
 export function createHabitatApiClient(baseUrl = process.env.HABITAT_API_BASE_URL ?? "http://localhost:8787"): HabitatApiClient {
@@ -150,6 +152,8 @@ export function createHabitatApiClient(baseUrl = process.env.HABITAT_API_BASE_UR
     sendHeartbeat: () => request<{ heartbeat: Record<string, unknown> }>("POST", "/heartbeat"),
     sendSummary: () => request<{ summary: Record<string, unknown> }>("POST", "/summary"),
     reportUnlocks: () => request<{ report: Record<string, unknown> }>("POST", "/unlocks/report"),
+    scan: (options) =>
+      request("GET", `/scan?x=${options.x}&y=${options.y}&sensorStrength=${options.strength}&radiusTiles=${options.radius}`),
     getServerLogs: async () => {
       try {
         return await request<{ logs: ServerLogEntry[] }>("GET", "/server/logs");

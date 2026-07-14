@@ -249,6 +249,13 @@ export async function fetchKeplerVersion(): Promise<Record<string, unknown>> {
   return requestKepler<Record<string, unknown>>("GET", "/version");
 }
 
+export async function fetchWorldScan(options: {
+  habitatId: string; x: number; y: number; sensorStrength: number; radiusTiles: number;
+}): Promise<Record<string, unknown>> {
+  const query = new URLSearchParams(Object.entries(options).map(([key, value]) => [key, String(value)]));
+  return requestKepler<Record<string, unknown>>("GET", `/world/scan?${query.toString()}`);
+}
+
 export async function fetchSolarIrradiance(): Promise<Record<string, unknown>> {
   return requestKepler<Record<string, unknown>>("GET", "/world/solar-irradiance");
 }

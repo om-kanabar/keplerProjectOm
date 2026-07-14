@@ -1,8 +1,5 @@
-const loadingScreen = document.querySelector('#loading-screen');
 const buildCommit = document.querySelector('#build-commit');
-const loadingDots = [...document.querySelectorAll('.loading-dot')];
 const timeCommit = document.querySelector("#time-commit")
-const loadingError = document.querySelector('#loading-error');
 const dashboardContent = document.querySelector('.dashboard-content');
 const greeting = document.querySelector('.dashboard-intro');
 const habitatFact = document.querySelector('#habitat-fact');
@@ -76,31 +73,6 @@ if (habitatFact) {
     habitatFact.textContent = habitatFacts[factIndex];
 }
 
-function animateLoadingDots() {
-    if (!loadingDots.length) return;
-
-    function update(now) {
-        loadingDots.forEach((dot, index) => {
-            const primaryWave = Math.max(0, Math.sin(index * 0.42 - now * 0.0024)) ** 5;
-            const secondaryWave = Math.max(0, Math.sin(index * 0.31 - now * 0.0019 + 1.8)) ** 7;
-            const tertiaryWave = Math.max(0, Math.sin(index * 0.24 - now * 0.0015 + 3.6)) ** 9;
-            const detailWave = Math.max(0, Math.sin(index * 0.58 - now * 0.0031 + 0.7)) ** 12;
-            const brightness = Math.min(1, Math.max(
-                primaryWave,
-                secondaryWave * 0.72,
-                tertiaryWave * 0.5,
-                detailWave * 0.35,
-            ));
-            dot.style.opacity = String(0.1 + brightness * 0.9);
-        });
-        requestAnimationFrame(update);
-    }
-
-    requestAnimationFrame(update);
-}
-
-animateLoadingDots();
-
 function formatCommitAge(commitDate) {
     const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(commitDate).getTime()) / 1000));
     const hours = Math.floor(elapsedSeconds / 3600);
@@ -114,10 +86,6 @@ function formatCommitAge(commitDate) {
 }
 
 async function startHabitat() {
-    const minimumLoadingTime = new Promise((resolve) => {
-        window.setTimeout(resolve, 1000);
-    });
-
     try {
         const response = await fetch('https://api.github.com/repos/om-kanabar/keplerProjectOm/commits?per_page=1');
         if (!response.ok) throw new Error('Unable to fetch latest commit');
@@ -135,25 +103,17 @@ async function startHabitat() {
             buildCommit.href = `https://github.com/om-kanabar/keplerProjectOm/commit/${commit}`;
         }
 
-        await minimumLoadingTime;
-        document.body.classList.add('is-ready');
-        if (greeting) {
-            window.setTimeout(() => {
-                greeting.classList.add('greeting-seen');
-                window.setTimeout(() => habitatRail?.classList.add('is-visible'), 700);
-            }, 1800);
-        }
-        loadingScreen?.classList.add('is-leaving');
-
-        window.setTimeout(() => {
-            loadingScreen?.remove();
-        }, 950);
-    } catch (error) {
-        loadingScreen?.classList.add('has-error');
-        if (loadingError) {
-            loadingError.textContent = 'AN ERROR OCCURRED // UNABLE TO REACH BUILD SERVER';
-        }
+    } catch {
+        // Build metadata is optional; the dashboard is already initialized.
     }
 }
 
+if (greeting) {
+    window.setTimeout(() => {
+        greeting.classList.add('greeting-seen');
+        window.setTimeout(() => habitatRail?.classList.add('is-visible'), 700);
+    }, 1800);
+}
+
+window.dispatchEvent(new Event('habitat:ready'));
 startHabitat();
