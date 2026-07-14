@@ -1,5 +1,5 @@
 {
-  "name": "aerie-habitat",
+  "name": "habitat",
   "version": "0.1.2",
   "description": "A Habitat CLI for Kepler registration.",
   "type": "module",
