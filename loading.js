@@ -34,7 +34,7 @@ async function revealDashboard() {
 const startupTimeout = window.setTimeout(() => {
     loadingScreen?.classList.add('has-error');
     if (loadingError) {
-        loadingError.textContent = 'DASHBOARD INITIALIZATION FAILED // PAGE REMAINS SAFELY HIDDEN';
+        loadingError.textContent = 'DASHBOARD INITIALIZATION FAILED';
     }
 }, 7000);
 

@@ -14,6 +14,9 @@
     <link href="https://fonts.cdnfonts.com/css/menlo" rel="stylesheet">
     <link href="https://fonts.cdnfonts.com/css/glacial-indifference-2" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script>
+        window.HABITAT_API_BASE_URL = window.HABITAT_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    </script>
     <script src="loading.js" defer></script>
     <script src="scripts.js" defer></script>
 </head>
@@ -75,9 +78,9 @@
                     <span class="panel-time">UPDATED 08:42:17</span>
                 </div>
                 <div class="module-overview-grid">
-                    <article class="module-overview-card active-module"><i class="bi bi-building"></i><div><span>COMMAND MODULE</span><strong>Online</strong></div><small>01</small></article>
-                    <article class="module-overview-card active-module"><i class="bi bi-brightness-high"></i><div><span>SOLAR ARRAY</span><strong>Generating</strong></div><small>02</small></article>
-                    <article class="module-overview-card active-module"><i class="bi bi-battery-charging"></i><div><span>BATTERY BANK</span><strong>84% charge</strong></div><small>03</small></article>
+                    <article class="module-overview-card active-module" data-blueprint-id="command-module"><i class="bi bi-building"></i><div><span>COMMAND MODULE</span><strong data-module-status>ONLINE</strong></div><small>01</small></article>
+                    <article class="module-overview-card active-module" data-blueprint-id="small-solar-array"><i class="bi bi-brightness-high"></i><div><span>SOLAR ARRAY</span><strong data-module-status>GENERATING</strong></div><small>02</small></article>
+                    <article class="module-overview-card active-module" data-blueprint-id="basic-battery"><i class="bi bi-battery-charging"></i><div><span>BATTERY BANK</span><strong data-module-status>84% CHARGE</strong></div><small>03</small></article>
                     <article class="module-overview-card"><i class="bi bi-plus-lg"></i><div><span>CONSTRUCTION SLOT</span><strong>Available</strong></div><small>04</small></article>
                 </div>
                 <div class="overview-readings">

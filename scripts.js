@@ -87,24 +87,43 @@ function formatCommitAge(commitDate) {
 
 async function startHabitat() {
     try {
-        const response = await fetch('https://api.github.com/repos/om-kanabar/keplerProjectOm/commits?per_page=1');
-        if (!response.ok) throw new Error('Unable to fetch latest commit');
-
-        const [latestCommit] = await response.json();
-        const commit = latestCommit?.sha;
-        const commitDate = latestCommit?.commit?.author?.date;
-        if (!commit) throw new Error('GitHub returned no commit');
-
-        if (buildCommit) {
-            const shortCommit = commit.slice(0, 8);
-            const age = commitDate ? formatCommitAge(commitDate) : 'recently';
-            buildCommit.textContent = shortCommit;
-            if (timeCommit) timeCommit.textContent = age;
-            buildCommit.href = `https://github.com/om-kanabar/keplerProjectOm/commit/${commit}`;
+        const apiBaseUrl = window.HABITAT_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+        const statusResponse = await fetch(`${apiBaseUrl}/status`);
+        if (!statusResponse.ok) throw new Error(`Habitat API returned HTTP ${statusResponse.status}`);
+        const liveStatus = await statusResponse.json();
+        const moduleCards = [...document.querySelectorAll('.module-overview-card[data-blueprint-id]')];
+        for (const card of moduleCards) {
+            const module = liveStatus.modules?.find((candidate) => candidate.blueprintId === card.dataset.blueprintId);
+            if (!module) continue;
+            const status = module.runtimeAttributes?.status || 'offline';
+            const state = card.querySelector('[data-module-status]');
+            if (state) state.textContent = status.toUpperCase();
+            card.classList.toggle('active-module', status === 'online' || status === 'active');
         }
 
-    } catch {
-        // Build metadata is optional; the dashboard is already initialized.
+        try {
+            const response = await fetch('https://api.github.com/repos/om-kanabar/keplerProjectOm/commits?per_page=1');
+            if (!response.ok) throw new Error('Unable to fetch latest commit');
+
+            const [latestCommit] = await response.json();
+            const commit = latestCommit?.sha;
+            const commitDate = latestCommit?.commit?.author?.date;
+            if (!commit) throw new Error('GitHub returned no commit');
+
+            if (buildCommit) {
+                const shortCommit = commit.slice(0, 8);
+                const age = commitDate ? formatCommitAge(commitDate) : 'recently';
+                buildCommit.textContent = shortCommit;
+                if (timeCommit) timeCommit.textContent = age;
+                buildCommit.href = `https://github.com/om-kanabar/keplerProjectOm/commit/${commit}`;
+            }
+        } catch {
+            // Build metadata is optional; live Habitat status is the readiness gate.
+        }
+
+    } catch (error) {
+        console.error('Habitat dashboard could not load live server state.', error);
+        throw error;
     }
 }
 
@@ -115,5 +134,8 @@ if (greeting) {
     }, 1800);
 }
 
-window.dispatchEvent(new Event('habitat:ready'));
-startHabitat();
+startHabitat()
+    .then(() => window.dispatchEvent(new Event('habitat:ready')))
+    .catch(() => {
+        // Keep the dashboard hidden; loading.js owns the visible failure state.
+    });

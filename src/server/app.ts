@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { registerCatalogRoutes } from "./routes/catalog";
 import { registerConstructionRoutes } from "./routes/construction";
 import { registerInventoryRoutes } from "./routes/inventory";
@@ -10,6 +11,15 @@ import { fetchKeplerHealth, fetchKeplerModuleCatalog, fetchKeplerSiteTypeCatalog
 
 export function createApp(): Hono {
   const app = new Hono();
+
+  const webOrigin = process.env.HABITAT_WEB_ORIGIN;
+  if (webOrigin) {
+    app.use("*", cors({
+      origin: webOrigin,
+      allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type"],
+    }));
+  }
 
   app.use("*", async (c, next) => {
     await next();
