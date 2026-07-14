@@ -28,5 +28,3 @@ appendServerLog({
   level: "info",
   message: `Habitat API listening on http://${server.hostname}:${server.port}`,
 });
-
-console.log(`Habitat API listening on http://${server.hostname}:${server.port}`);
