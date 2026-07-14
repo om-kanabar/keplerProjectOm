@@ -2,7 +2,7 @@ import { createApp } from "./app";
 import { appendServerLog } from "./logs";
 
 function readHost(): string {
-  return process.env.HABITAT_API_HOST ?? "127.0.0.1";
+  return process.env.HABITAT_API_HOST ?? "0.0.0.0";
 }
 
 function readPort(): number {
