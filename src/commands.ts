@@ -349,6 +349,7 @@ export async function runCli(argv: string[]): Promise<void> {
       "  habitat resource list",
       "  habitat unregister",
       "  habitat auth web",
+      "  habitat web list",
       "",
     ].join("\n"),
   );
@@ -424,6 +425,7 @@ export async function runCli(argv: string[]): Promise<void> {
   const resourceCommand = program.command("resource").description("Inspect the Kepler resource catalog.");
   const serverCommand = program.command("server").description("Inspect the local Habitat API server.");
   const authCommand = program.command("auth").description("Authenticate with the remote Habitat server.");
+  const webCommand = program.command("web").description("Inspect active web dashboard sessions.");
   const humanCommand = program.command("human").description("Manage habitat crew."); const evaCommand = program.command("eva").description("Manage EVA exploration."); const alertCommand = program.command("alert").description("Inspect operational alerts.");
   humanCommand.command("list").action(async () => { const result = await apiClient.listHumans(); respond(result, () => console.table(result.humans)); });
   humanCommand.command("move").argument("<humanId>").argument("<moduleId>").action(async (humanId, moduleId) => { const result = await apiClient.moveHuman(humanId, moduleId); respond(result, () => console.log("Human moved.")); });
@@ -459,6 +461,19 @@ export async function runCli(argv: string[]): Promise<void> {
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : "Unable to create a web login code.");
+      }
+    });
+  webCommand
+    .command("list")
+    .description("List active web dashboard sessions without exposing credentials.")
+    .action(async () => {
+      try {
+        const sessions = await apiClient.listWebSessions(getKeplerToken());
+        respond(sessions, () => {
+          console.table(sessions.sessions);
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : "Unable to list active web sessions.");
       }
     });
   const unlocksCommand = program.command("unlocks").description("Report local unlock-relevant state to Kepler.");

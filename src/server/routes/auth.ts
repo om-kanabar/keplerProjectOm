@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { getKeplerToken } from "../../kepler";
+import { createWebSessionStore } from "../web-sessions";
 
 const WEB_CODE_TTL_MS = 2 * 60 * 1000;
 const WEB_CODE_REQUEST_COOLDOWN_MS = 5 * 60 * 1000;
@@ -11,13 +12,9 @@ type WebLoginCode = {
   issuedAt: number;
 };
 
-type WebSession = {
-  expiresAt: Date;
-};
-
 export function registerAuthRoutes(app: Hono): void {
   const webLoginCodes = new Map<string, WebLoginCode>();
-  const webSessions = new Map<string, WebSession>();
+  const webSessions = createWebSessionStore();
 
   app.post("/auth/web", (c) => {
     const configuredToken = getKeplerToken();
@@ -57,10 +54,8 @@ export function registerAuthRoutes(app: Hono): void {
 
     webLoginCodes.delete(codeHash);
     const sessionToken = randomBytes(32).toString("base64url");
-    webSessions.set(hashSecret(sessionToken), {
-      expiresAt: new Date(Date.now() + WEB_SESSION_TTL_SECONDS * 1000),
-    });
-    removeExpiredSessions(webSessions);
+    const expiresAt = new Date(Date.now() + WEB_SESSION_TTL_SECONDS * 1000);
+    webSessions.create(hashSecret(sessionToken), expiresAt);
 
     c.header(
       "Set-Cookie",
@@ -71,17 +66,22 @@ export function registerAuthRoutes(app: Hono): void {
 
   app.get("/auth/web/session", (c) => {
     const sessionToken = readCookie(c.req.header("Cookie"), "habitat_session");
-    const session = sessionToken ? webSessions.get(hashSecret(sessionToken)) : undefined;
+    const session = sessionToken ? webSessions.getActive(hashSecret(sessionToken)) : undefined;
 
-    if (!session || session.expiresAt.getTime() <= Date.now()) {
-      if (sessionToken) {
-        webSessions.delete(hashSecret(sessionToken));
-      }
-
+    if (!session) {
       return Response.json({ authenticated: false }, { status: 401 });
     }
 
     return Response.json({ authenticated: true });
+  });
+
+  app.get("/auth/web/sessions", (c) => {
+    const suppliedToken = readBearerToken(c.req.header("Authorization"));
+    if (!suppliedToken || !tokensMatch(suppliedToken, getKeplerToken())) {
+      return Response.json({ error: { message: "Invalid Kepler API key." } }, { status: 401 });
+    }
+
+    return c.json({ sessions: webSessions.listActive() });
   });
 }
 
@@ -118,16 +118,6 @@ function removeExpiredCodes(webLoginCodes: Map<string, WebLoginCode>): void {
   for (const [code, login] of webLoginCodes) {
     if (login.issuedAt + WEB_CODE_REQUEST_COOLDOWN_MS <= now) {
       webLoginCodes.delete(code);
-    }
-  }
-}
-
-function removeExpiredSessions(webSessions: Map<string, WebSession>): void {
-  const now = Date.now();
-
-  for (const [tokenHash, session] of webSessions) {
-    if (session.expiresAt.getTime() <= now) {
-      webSessions.delete(tokenHash);
     }
   }
 }

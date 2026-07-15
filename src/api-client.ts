@@ -31,6 +31,13 @@ type WebLoginCodeResponse = {
   expiresAt: string;
 };
 
+type WebSessionMetadata = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  lastSeenAt: string;
+};
+
 type ConstructionStatusJob = {
   facility: HabitatModule;
   blueprintId: string;
@@ -40,6 +47,7 @@ export type ScanOptions = { strength: number; radius: number };
 
 export type HabitatApiClient = {
   createWebLoginCode: (token: string) => Promise<WebLoginCodeResponse>;
+  listWebSessions: (token: string) => Promise<{ sessions: WebSessionMetadata[] }>;
   getRegistration: () => Promise<RegistrationResponse>;
   getStatus: () => Promise<StatusResponse>;
   register: (displayName: string) => Promise<{ registration: KeplerRegistration }>;
@@ -140,6 +148,23 @@ export function createHabitatApiClient(baseUrl = process.env.HABITAT_API_BASE_UR
       }
 
       return (await response.json()) as WebLoginCodeResponse;
+    },
+    listWebSessions: async (token) => {
+      let response: Response;
+
+      try {
+        response = await fetch(normalizedBaseUrl + "/auth/web/sessions", {
+          headers: { Authorization: "Bearer " + token },
+        });
+      } catch {
+        throw new Error("Unable to reach the Habitat API. Set HABITAT_API_BASE_URL to the remote server URL.");
+      }
+
+      if (!response.ok) {
+        throw new Error(await readApiError(response));
+      }
+
+      return (await response.json()) as { sessions: WebSessionMetadata[] };
     },
     getRegistration: () => request<RegistrationResponse>("GET", "/registration"),
     getStatus: () => request<StatusResponse>("GET", "/status"),

@@ -1,7 +1,17 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runCli } from "../src/commands";
 
 const previousToken = process.env.KEPLER_WORLD_TOKEN;
+const previousSessionDatabasePath = process.env.HABITAT_WEB_SESSION_DB_PATH;
+let sessionDatabaseDirectory = "";
+
+beforeEach(() => {
+  sessionDatabaseDirectory = mkdtempSync(join(tmpdir(), "habitat-web-sessions-"));
+  process.env.HABITAT_WEB_SESSION_DB_PATH = join(sessionDatabaseDirectory, "sessions.sqlite");
+});
 
 afterEach(() => {
   if (previousToken === undefined) {
@@ -9,6 +19,14 @@ afterEach(() => {
   } else {
     process.env.KEPLER_WORLD_TOKEN = previousToken;
   }
+
+  if (previousSessionDatabasePath === undefined) {
+    delete process.env.HABITAT_WEB_SESSION_DB_PATH;
+  } else {
+    process.env.HABITAT_WEB_SESSION_DB_PATH = previousSessionDatabasePath;
+  }
+
+  rmSync(sessionDatabaseDirectory, { recursive: true, force: true });
 });
 
 describe("web authentication", () => {
@@ -84,6 +102,40 @@ describe("web authentication", () => {
     expect(reusedResponse.status).toBe(401);
   });
 
+  test("persists sessions across app restarts and lists metadata without secrets", async () => {
+    process.env.KEPLER_WORLD_TOKEN = "test-kepler-token";
+    const { createApp } = await import("../src/server/app");
+    const app = createApp();
+    const headers = { Authorization: "Bearer test-kepler-token" };
+    const issueResponse = await app.request("/auth/web", { method: "POST", headers });
+    const { code } = await issueResponse.json() as { code: string };
+    const verifyResponse = await app.request("/auth/web/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    const sessionCookie = verifyResponse.headers.get("Set-Cookie")?.split(";")[0] ?? "";
+
+    const restartedApp = createApp();
+    const sessionResponse = await restartedApp.request("/auth/web/session", {
+      headers: { Cookie: sessionCookie },
+    });
+    expect(sessionResponse.status).toBe(200);
+
+    const sessionsResponse = await restartedApp.request("/auth/web/sessions", { headers });
+    expect(sessionsResponse.status).toBe(200);
+    const sessions = await sessionsResponse.json() as { sessions: Array<Record<string, string>> };
+    expect(sessions.sessions).toHaveLength(1);
+    expect(sessions.sessions[0]).toEqual({
+      id: expect.any(String),
+      createdAt: expect.any(String),
+      expiresAt: expect.any(String),
+      lastSeenAt: expect.any(String),
+    });
+    expect(JSON.stringify(sessions)).not.toContain(code);
+    expect(JSON.stringify(sessions)).not.toContain(sessionCookie.split("=")[1] ?? "");
+  });
+
   test("rejects a missing or incorrect Kepler token", async () => {
     process.env.KEPLER_WORLD_TOKEN = "test-kepler-token";
     const { createApp } = await import("../src/server/app");
@@ -148,6 +200,33 @@ describe("web authentication", () => {
     }
 
     expect(request?.url).toBe("https://habitat.tailnet.ts.net/auth/web");
+    expect(request?.headers.get("Authorization")).toBe("Bearer test-kepler-token");
+  });
+
+  test("habitat web list requests active sessions with the configured token", async () => {
+    const previousBaseUrl = process.env.HABITAT_API_BASE_URL;
+    const originalFetch = globalThis.fetch;
+    process.env.KEPLER_WORLD_TOKEN = "test-kepler-token";
+    process.env.HABITAT_API_BASE_URL = "https://habitat.tailnet.ts.net";
+    let request: Request | undefined;
+
+    globalThis.fetch = async (input, init) => {
+      request = new Request(input, init);
+      return Response.json({ sessions: [] });
+    };
+
+    try {
+      await runCli(["bun", "habitat", "web", "list"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousBaseUrl === undefined) {
+        delete process.env.HABITAT_API_BASE_URL;
+      } else {
+        process.env.HABITAT_API_BASE_URL = previousBaseUrl;
+      }
+    }
+
+    expect(request?.url).toBe("https://habitat.tailnet.ts.net/auth/web/sessions");
     expect(request?.headers.get("Authorization")).toBe("Bearer test-kepler-token");
   });
 });

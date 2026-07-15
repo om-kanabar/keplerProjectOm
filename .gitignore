@@ -3,3 +3,6 @@ node_modules
 habitat.sqlite
 habitat.sqlite-wal
 habitat.sqlite-shm
+habitat-web-sessions.sqlite
+habitat-web-sessions.sqlite-wal
+habitat-web-sessions.sqlite-shm
