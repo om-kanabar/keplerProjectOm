@@ -12,7 +12,7 @@ describe("web login page", () => {
     expect(html).toContain('id="loading-screen"');
     expect(html).toContain('id="web-auth-form"');
     expect(html).toContain('id="web-login-code"');
-    expect(html).toContain('class="auth-loading-dots"');
+    expect(html).toContain('class="auth-passcode-dots"');
     expect(html).toContain('class="dashboard-shell"');
     expect(html).toContain('src="app.js"');
     expect(app).toContain("/auth/web/session");
@@ -20,6 +20,7 @@ describe("web login page", () => {
     expect(app).toContain("habitat:auth-required");
     expect(app).toContain("habitat:ready");
     expect(app).toContain("is-verifying");
+    expect(app).toContain("renderPasscodeDots");
     expect(app).toContain("1500");
     expect(app).toContain("response.text()");
     expect(app).toContain("JSON.parse");

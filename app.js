@@ -4,9 +4,24 @@ const authForm = document.querySelector('#web-auth-form');
 const authCodeInput = document.querySelector('#web-login-code');
 const authSubmit = authForm?.querySelector('button[type="submit"]');
 const authError = document.querySelector('#web-auth-error');
+const authPasscodeDots = document.querySelector('.auth-passcode-dots');
 const buildCommit = document.querySelector('#build-commit');
 const timeCommit = document.querySelector('#time-commit');
 const minimumAuthLoadingTime = 1500;
+const authCodeLength = 24;
+
+function renderPasscodeDots() {
+    if (!authPasscodeDots) return;
+
+    const filledDots = authCodeInput?.value.length ?? 0;
+    authPasscodeDots.replaceChildren(...Array.from({ length: authCodeLength }, (_, index) => {
+        const dot = document.createElement('span');
+        dot.className = 'auth-passcode-dot';
+        dot.style.setProperty('--dot-index', index);
+        dot.classList.toggle('is-filled', index < filledDots);
+        return dot;
+    }));
+}
 
 async function readJson(response) {
     const text = await response.text();
@@ -67,9 +82,13 @@ function showAuthentication() {
     authPage.classList.remove('is-verifying');
     if (authCodeInput) authCodeInput.disabled = false;
     if (authSubmit) authSubmit.disabled = false;
+    renderPasscodeDots();
     authCodeInput?.focus();
     window.dispatchEvent(new Event('habitat:auth-required'));
 }
+
+authCodeInput?.addEventListener('input', renderPasscodeDots);
+renderPasscodeDots();
 
 function showDashboard() {
     authPage.hidden = true;

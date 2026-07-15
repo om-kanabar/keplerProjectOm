@@ -35,15 +35,11 @@
             <code class="auth-command">habitat auth web</code>
             <form id="web-auth-form" class="auth-form">
                 <label for="web-login-code">Auth code</label>
-                <div class="auth-input-row">
-                    <input id="web-login-code" name="code" type="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required>
-                    <button type="submit">Continue</button>
+                <div class="auth-passcode-entry">
+                    <input id="web-login-code" name="code" type="password" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="24" required>
+                    <span class="auth-passcode-dots" aria-hidden="true"></span>
                 </div>
-                <div class="auth-loading-dots" aria-hidden="true">
-                    <span class="loading-dots">
-                        <span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span><span class="loading-dot">.</span>
-                    </span>
-                </div>
+                <button type="submit">Continue</button>
                 <p id="web-auth-error" class="auth-error" role="alert"></p>
             </form>
         </section>

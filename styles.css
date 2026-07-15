@@ -387,6 +387,11 @@ body.sidebar-expanded .nav-label {
 }
 
 @media (max-width: 600px) {
+    html,
+    body {
+        overflow-x: hidden;
+    }
+
     .dashboard-header { height: 4rem; }
     .dashboard-status { font-size: 0.5rem; }
     .dashboard-content { padding-top: 4rem; }
@@ -403,6 +408,59 @@ body.sidebar-expanded .nav-label {
     .habitat-rail { display: grid; grid-template-columns: repeat(2, 1fr); }
     .overview-readings div:nth-child(2) { border: 0; }
     .system-grid { grid-template-columns: 1fr; }
+
+    .overview-hero-layout {
+        gap: 2rem;
+    }
+
+    .overview-heading,
+    .section-heading,
+    .card-topline,
+    .card-reading,
+    .graph-heading {
+        gap: 0.75rem;
+    }
+
+    .overview-heading h2 {
+        font-size: 1.35rem;
+    }
+
+    .overview-heading > *,
+    .section-heading > *,
+    .card-topline > *,
+    .card-reading > *,
+    .graph-heading > * {
+        min-width: 0;
+    }
+
+    .module-overview-card {
+        grid-template-columns: auto 1fr;
+        padding: 1rem;
+    }
+
+    .module-overview-card small {
+        grid-column: 2;
+    }
+
+    .prototype-list > div {
+        grid-template-columns: 1.5rem minmax(0, 1fr);
+    }
+
+    .prototype-list em {
+        grid-column: 2;
+    }
+
+    .loading {
+        font-size: clamp(4.5rem, 22vw, 12rem);
+    }
+
+    .site-footer {
+        right: 1rem;
+        bottom: 0.8rem;
+        left: 1rem;
+        gap: 1rem;
+        font-size: 0.5rem;
+    }
 }
 
 .loading {
@@ -510,7 +568,6 @@ body.is-ready .dashboard-shell {
     text-transform: uppercase;
 }
 
-.auth-form input,
 .auth-form button {
     border: 1px solid #ede8dd55;
     border-radius: 0;
@@ -520,18 +577,52 @@ body.is-ready .dashboard-shell {
     font: 0.95rem 'Space Mono', 'Menlo', monospace;
 }
 
-.auth-input-row {
-    display: contents;
+.auth-passcode-entry {
+    position: relative;
 }
 
-.auth-input-row input {
-    min-width: 0;
-    letter-spacing: 0.06em;
+.auth-passcode-entry input {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    margin: 0;
+    border: 0;
+    opacity: 0;
+    cursor: text;
 }
 
-.auth-form input:focus {
+.auth-passcode-entry input:focus {
     outline: none;
+}
+
+.auth-passcode-dots {
+    display: flex;
+    min-height: 3.2rem;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.42rem;
+    border: 1px solid #ede8dd55;
+    padding: 1rem;
+    color: color-mix(in srgb, var(--white) 58%, transparent);
+    transition: border-color 160ms ease;
+}
+
+.auth-passcode-entry:focus-within .auth-passcode-dots {
     border-color: #d1bd8e;
+}
+
+.auth-passcode-dot {
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.auth-passcode-dot.is-filled {
+    opacity: 1;
 }
 
 .auth-form button {
@@ -561,29 +652,22 @@ body.is-ready .dashboard-shell {
     font: 0.72rem/1.4 'Space Mono', 'Menlo', monospace;
 }
 
-.auth-loading-dots {
-    display: none;
-    width: 100%;
-    justify-content: center;
-    padding: 1rem 0 0.2rem;
-    color: #ede8dd88;
-}
-
-.auth-loading-dots .loading-dots {
-    width: 5.5rem;
-}
-
-.auth-loading-dots .loading-dot {
-    font-size: 2.5rem;
-}
-
-.auth-page.is-verifying .auth-loading-dots {
-    display: flex;
-}
-
 .auth-page.is-verifying .auth-form button {
-    cursor: wait;
-    opacity: 0.5;
+    display: none;
+}
+
+.auth-page.is-verifying .auth-passcode-dots {
+    border-color: #d1bd8e66;
+}
+
+.auth-page.is-verifying .auth-passcode-dot {
+    animation: auth-passcode-pulse 1.1s ease-in-out infinite;
+    animation-delay: calc(var(--dot-index) * 45ms);
+}
+
+@keyframes auth-passcode-pulse {
+    0%, 100% { opacity: 0.12; }
+    50% { opacity: 1; }
 }
 
 @media (max-width: 34rem) {
@@ -615,6 +699,36 @@ body.is-ready .dashboard-shell {
     align-self: center;
     max-width: 54rem;
     padding: 7vw;
+}
+
+@media (max-width: 600px) {
+    .auth-page {
+        padding: 1.5rem 1rem 5rem;
+    }
+
+    .auth-command {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+
+    .dashboard-shell {
+        padding: 1.25rem 1rem;
+    }
+
+    .dashboard-shell-header {
+        align-items: flex-start;
+        gap: 1rem;
+        line-height: 1.4;
+    }
+
+    .dashboard-shell-status {
+        max-width: 9rem;
+        text-align: right;
+    }
+
+    .dashboard-shell-content {
+        padding: 3rem 0 5rem;
+    }
 }
 
 .loading-hero {

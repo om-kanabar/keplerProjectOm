@@ -18,16 +18,25 @@ export function printScan(scan: Record<string, unknown>): void {
   console.log(`  Sensor Strength: ${formatStructuredValue(scan.sensorStrength)}`);
   console.log(`  Radius: ${formatStructuredValue(scan.radiusTiles)}`);
   for (const tile of tiles) {
-    console.log(`  Tile (${formatStructuredValue(tile.x)}, ${formatStructuredValue(tile.y)}) distance=${formatStructuredValue(tile.distance)} terrain=${formatStructuredValue(tile.terrain)}`);
+    console.log(`  Tile (${formatStructuredValue(tile.x)}, ${formatStructuredValue(tile.y)}) distance=${formatStructuredValue(tile.distance ?? tile.distanceTiles)} terrain=${formatStructuredValue(tile.terrain)}`);
     if (tiles.length === 1) {
       console.log("  Resource Probabilities");
       for (const p of (Array.isArray(tile.probabilities) ? tile.probabilities : []) as Array<Record<string, unknown>>) {
-        console.log(`    ${formatStructuredValue(p.resource ?? p.resourceId ?? p.candidate)}: ${formatStructuredValue(p.probability ?? p.confidence)}%`);
+        console.log(`    ${formatStructuredValue(p.resource ?? p.resourceId ?? p.resourceType ?? p.candidate)}: ${formatStructuredValue(p.probability ?? p.probabilityPct ?? p.confidence)}%`);
       }
     }
+    const topCandidate = tile.topCandidate;
+    const topCandidateRecord = topCandidate && typeof topCandidate === "object"
+      ? topCandidate as Record<string, unknown>
+      : undefined;
+    const topCandidateName = topCandidateRecord?.resource
+      ?? topCandidateRecord?.resourceId
+      ?? topCandidateRecord?.resourceType
+      ?? topCandidateRecord?.candidate
+      ?? topCandidate;
     const estimate = tile.quantityEstimate as Record<string, unknown> | null | undefined;
-    console.log(`  Top Candidate: ${formatStructuredValue(tile.topCandidate)}`);
-    console.log(`  Quantity: ${formatStructuredValue(estimate?.estimatedKilograms ?? estimate?.kilograms)} kg; range ${formatStructuredValue(estimate?.minimumKilograms ?? estimate?.minimum)}-${formatStructuredValue(estimate?.maximumKilograms ?? estimate?.maximum)} kg; exact ${formatStructuredValue(estimate?.exact)}`);
+    console.log(`  Top Candidate: ${formatStructuredValue(topCandidateName)}`);
+    console.log(`  Quantity: ${formatStructuredValue(estimate?.estimatedKilograms ?? estimate?.estimatedKg ?? estimate?.kilograms)} kg; range ${formatStructuredValue(estimate?.minimumKilograms ?? estimate?.minimumKg ?? estimate?.minimum)}-${formatStructuredValue(estimate?.maximumKilograms ?? estimate?.maximumKg ?? estimate?.maximum)} kg; exact ${formatStructuredValue(estimate?.exact)}`);
   }
 }
 
