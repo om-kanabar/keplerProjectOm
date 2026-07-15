@@ -38,7 +38,7 @@ export type StarterModulePayload = {
 export type HabitatHuman = { id: string; displayName: string; locationModuleId: string };
 export type AlertContract = { schemaVersion: string; schema: Record<string, unknown> };
 export type CarriedResources = Record<string, number>;
-export type ExplorationState = { humanId: string | null; x: number; y: number; carried: CarriedResources; capacityKg: number };
+export type ExplorationState = { humanId: string | null; x: number; y: number; carried: CarriedResources; capacityKg: number; battery: number; batteryCapacity: number; batteryPerTick: number; oxygen: number; oxygenCapacity: number; oxygenPerTick: number };
 export type HabitatAlert = { id: string; key: string; severity: string; status: "open" | "acknowledged" | "resolved"; source: string; createdAt: string; lastObservedAt: string; occurrenceCount: number; subjectHumanId?: string; subjectModuleId?: string };
 
 export type HabitatModule = StarterModulePayload & {

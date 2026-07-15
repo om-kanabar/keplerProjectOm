@@ -1,6 +1,7 @@
 import { advanceConstructionTicks } from "./construction";
 import { fetchSolarIrradiance } from "./kepler";
 import { readData, writeData } from "./storage";
+import { drainEvaForTicks } from "./eva";
 import {
   BatteryRechargeResult,
   HabitatModule,
@@ -75,9 +76,11 @@ function runPowerFlowSimulation(
   const actualEnergyConsumedKwh =
     direction > 0 ? simulation.totalLoadEnergyConsumedKwh : batteryChargeBeforeKwh - batteryChargeAfterKwh;
 
+  const exploration = drainEvaForTicks(data.exploration ?? { humanId: null, x: 0, y: 0, carried: {}, capacityKg: 20, battery: 100, batteryCapacity: 100, batteryPerTick: 2, oxygen: 100, oxygenCapacity: 100, oxygenPerTick: 3 }, simulation.completedTickCount);
   writeData({
     ...data,
     modules: simulation.modules,
+    exploration,
   });
 
   return {
