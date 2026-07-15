@@ -25,6 +25,8 @@ describe("web login page", () => {
     expect(app).toContain("response.text()");
     expect(app).toContain("JSON.parse");
     expect(app).toContain("HTTP");
+    expect(app).toContain("adminauth");
+    expect(app).toContain("habitat_local_admin");
     expect(readProjectFile("loading.js")).toContain("1500");
     expect(readProjectFile("loading.js")).toContain("is-returning");
     expect(readProjectFile("loading.js")).toContain("dots-only");

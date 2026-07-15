@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { hydrateStarterModules, mergeStarterModules } from "./modules";
+import { hydrateStarterHumans } from "./humans";
 import { readData, writeData } from "./storage";
-import { BlueprintReference, KeplerRegistration, ResourceReference, StarterModulePayload } from "./types";
+import { AlertContract, BlueprintReference, HabitatHuman, KeplerRegistration, ResourceReference, StarterModulePayload } from "./types";
 
 type HabitatRegistrationResponse = {
   habitatId: string;
   starterModules: StarterModulePayload[];
   blueprints: BlueprintReference[];
+  starterHumans: HabitatHuman[];
+  contracts: { alerts: AlertContract };
 };
 
 type HabitatResponse = {
@@ -155,6 +158,8 @@ export async function registerWithKepler(displayName: string): Promise<KeplerReg
     ...data,
     keplerRegistration: registration,
     modules: hydrateStarterModules(response.starterModules),
+    humans: hydrateStarterHumans(response.starterHumans ?? []),
+    alertContract: response.contracts?.alerts,
   });
 
   return registration;
@@ -258,6 +263,8 @@ export async function fetchWorldScan(options: {
   const query = new URLSearchParams(Object.entries(options).map(([key, value]) => [key, String(value)]));
   return requestKepler<Record<string, unknown>>("GET", `/world/scan?${query.toString()}`);
 }
+
+export async function collectWorldResource(options: { habitatId: string; x: number; y: number; quantityKg: number }): Promise<{ resourceType: string; collectedKg: number }> { return (await requestKepler<{ collection: { resourceType: string; collectedKg: number } }>("POST", "/world/collect", options)).collection; }
 
 export async function fetchSolarIrradiance(): Promise<Record<string, unknown>> {
   return requestKepler<Record<string, unknown>>("GET", "/world/solar-irradiance");

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { HabitatData, HabitatModule, InventoryRecord, KeplerRegistration } from "./types";
+import { AlertContract, ExplorationState, HabitatAlert, HabitatData, HabitatHuman, HabitatModule, InventoryRecord, KeplerRegistration } from "./types";
 
 const DATA_FILE_NAME = "habitat.sqlite";
 const STATE_TABLE_NAME = "habitat_state";
@@ -105,8 +105,14 @@ function parseStoredData(value: string): HabitatData {
     inventory: parseInventory(parsed.inventory),
     modules: parseModules(parsed.modules),
     habitatApiBaseUrl: typeof parsed.habitatApiBaseUrl === "string" ? parsed.habitatApiBaseUrl : undefined,
+    humans: parseHumans(parsed.humans), exploration: parseExploration(parsed.exploration), alerts: parseAlerts(parsed.alerts), alertContract: parseAlertContract(parsed.alertContract),
   };
 }
+
+function parseHumans(value: unknown): HabitatHuman[] | undefined { return Array.isArray(value) ? value.filter((v): v is HabitatHuman => !!v && typeof v === "object" && typeof (v as HabitatHuman).id === "string" && typeof (v as HabitatHuman).displayName === "string" && typeof (v as HabitatHuman).locationModuleId === "string") : undefined; }
+function parseExploration(value: unknown): ExplorationState | undefined { if (!value || typeof value !== "object") return undefined; const v = value as Partial<ExplorationState>; return (v.humanId === null || typeof v.humanId === "string") && typeof v.x === "number" && Number.isInteger(v.x) && typeof v.y === "number" && Number.isInteger(v.y) && !!v.carried && typeof v.carried === "object" && typeof v.capacityKg === "number" ? { humanId: v.humanId, x: v.x, y: v.y, carried: parseInventory(v.carried) ?? {}, capacityKg: v.capacityKg } : undefined; }
+function parseAlerts(value: unknown): HabitatAlert[] | undefined { return Array.isArray(value) ? value.filter((v): v is HabitatAlert => !!v && typeof v === "object" && typeof (v as HabitatAlert).id === "string" && typeof (v as HabitatAlert).key === "string" && typeof (v as HabitatAlert).status === "string") : undefined; }
+function parseAlertContract(value: unknown): AlertContract | undefined { return !!value && typeof value === "object" && typeof (value as AlertContract).schemaVersion === "string" && !!(value as AlertContract).schema && typeof (value as AlertContract).schema === "object" ? value as AlertContract : undefined; }
 
 function parseKeplerRegistration(
   value: unknown,

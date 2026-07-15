@@ -86,7 +86,7 @@ export async function runCli(argv: string[]): Promise<void> {
       return ["Usage: habitat status", "Example: habitat status"].join("\n");
     }
     if (args[0] === "scan") {
-      return ["Usage: habitat scan --x <integer> --y <integer> --strength <0-100> [--radius <0-5>]", "Example: habitat scan --x 3 --y -2 --strength 60"].join("\n");
+      return ["Usage: habitat scan --strength <0-100> [--radius <0-5>]", "Example: habitat scan --strength 60"].join("\n");
     }
 
     if (args[0] === "tick") {
@@ -343,7 +343,7 @@ export async function runCli(argv: string[]): Promise<void> {
       "Examples:",
       '  habitat register --name "Habitat"',
       "  habitat status",
-      "  habitat scan --x 3 --y -2 --strength 60",
+      "  habitat scan --strength 60",
       "  habitat module list",
       "  habitat module battery recharge 500",
       "  habitat resource list",
@@ -401,19 +401,15 @@ export async function runCli(argv: string[]): Promise<void> {
     });
 
   program.command("scan")
-    .description("Scan Kepler resource probabilities at a position.")
-    .requiredOption("--x <integer>", "current x coordinate")
-    .requiredOption("--y <integer>", "current y coordinate")
+    .description("Scan Kepler resource probabilities from the deployed explorer.")
     .requiredOption("--strength <0-100>", "effective sensor strength")
     .option("--radius <0-5>", "scan radius in tiles", "0")
-    .action(async (options: { x: string; y: string; strength: string; radius: string }) => {
+    .action(async (options: { strength: string; radius: string }) => {
       try {
-        const x = Number(options.x), y = Number(options.y), strength = Number(options.strength), radius = Number(options.radius);
-        if (!Number.isInteger(x)) throw new Error("x must be an integer.");
-        if (!Number.isInteger(y)) throw new Error("y must be an integer.");
+        const strength = Number(options.strength), radius = Number(options.radius);
         if (!Number.isInteger(strength) || strength < 0 || strength > 100) throw new Error("strength must be an integer between 0 and 100.");
         if (!Number.isInteger(radius) || radius < 0 || radius > 5) throw new Error("radius must be an integer between 0 and 5.");
-        const scan = await apiClient.scan({ x, y, strength, radius });
+        const scan = await apiClient.scan({ strength, radius });
         respond({ scan }, () => printScan(scan));
       } catch (error) {
         fail(error instanceof Error ? error.message : "Unable to scan habitat.");
@@ -428,6 +424,16 @@ export async function runCli(argv: string[]): Promise<void> {
   const resourceCommand = program.command("resource").description("Inspect the Kepler resource catalog.");
   const serverCommand = program.command("server").description("Inspect the local Habitat API server.");
   const authCommand = program.command("auth").description("Authenticate with the remote Habitat server.");
+  const humanCommand = program.command("human").description("Manage habitat crew."); const evaCommand = program.command("eva").description("Manage EVA exploration."); const alertCommand = program.command("alert").description("Inspect operational alerts.");
+  humanCommand.command("list").action(async () => { const result = await apiClient.listHumans(); respond(result, () => console.table(result.humans)); });
+  humanCommand.command("move").argument("<humanId>").argument("<moduleId>").action(async (humanId, moduleId) => { const result = await apiClient.moveHuman(humanId, moduleId); respond(result, () => console.log("Human moved.")); });
+  evaCommand.command("status").action(async () => { const result = await apiClient.getEva(); respond(result, () => console.log(JSON.stringify(result.eva, null, 2))); });
+  evaCommand.command("deploy").argument("<humanId>").action(async (humanId) => { const result = await apiClient.evaDeploy(humanId); respond(result, () => console.log(JSON.stringify(result.eva, null, 2))); });
+  evaCommand.command("move").argument("<x>").argument("<y>").action(async (x, y) => { const result = await apiClient.evaMove(Number(x), Number(y)); respond(result, () => console.log(JSON.stringify(result.eva, null, 2))); });
+  evaCommand.command("dock").action(async () => { const result = await apiClient.evaDock(); respond(result, () => console.log(JSON.stringify(result.eva, null, 2))); });
+  program.command("collect").argument("<quantityKg>").action(async (quantityKg) => { const result = await apiClient.collect(Number(quantityKg)); respond(result, () => console.log(JSON.stringify(result, null, 2))); });
+  alertCommand.command("list").action(async () => { const result = await apiClient.listAlerts(); respond(result, () => console.table(result.alerts)); });
+  alertCommand.command("acknowledge").argument("<alertId>").action(async (alertId) => { const result = await apiClient.acknowledgeAlert(alertId); respond(result, () => console.log(JSON.stringify(result.alert, null, 2))); });
   program
     .command("connect")
     .description("Save the local Habitat API base URL for future commands.")

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getBlueprint } from "./blueprints";
 import { readData, writeData } from "./storage";
+import { ensureModuleUnoccupied } from "./humans";
 import { BlueprintReference, HabitatData, HabitatModule, RuntimeAttributes, StarterModulePayload } from "./types";
 
 export const VALID_MODULE_STATUSES = ["offline", "online", "active", "damaged"] as const;
@@ -146,6 +147,7 @@ export function deleteModule(moduleId: string): HabitatModule {
   if (module.source === "starter") {
     throw new Error("Starter modules cannot be deleted.");
   }
+  ensureModuleUnoccupied(module.id);
 
   writeData({
     ...data,

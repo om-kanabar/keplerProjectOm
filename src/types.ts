@@ -35,6 +35,12 @@ export type StarterModulePayload = {
   capabilities: string[];
 };
 
+export type HabitatHuman = { id: string; displayName: string; locationModuleId: string };
+export type AlertContract = { schemaVersion: string; schema: Record<string, unknown> };
+export type CarriedResources = Record<string, number>;
+export type ExplorationState = { humanId: string | null; x: number; y: number; carried: CarriedResources; capacityKg: number };
+export type HabitatAlert = { id: string; key: string; severity: string; status: "open" | "acknowledged" | "resolved"; source: string; createdAt: string; lastObservedAt: string; occurrenceCount: number; subjectHumanId?: string; subjectModuleId?: string };
+
 export type HabitatModule = StarterModulePayload & {
   source: "starter" | "local";
 };
@@ -102,4 +108,8 @@ export type HabitatData = Record<string, unknown> & {
   modules?: HabitatModule[];
   inventory?: InventoryRecord;
   habitatApiBaseUrl?: string;
+  humans?: HabitatHuman[];
+  exploration?: ExplorationState;
+  alerts?: HabitatAlert[];
+  alertContract?: AlertContract;
 };

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { fetchWorldScan } from "../../kepler";
 import { readData } from "../../storage";
+import { getEvaStatus } from "../../eva";
 
 function int(value: string | undefined, label: string): number {
   const parsed = Number(value);
@@ -16,10 +17,10 @@ export function registerScanRoutes(app: Hono): void {
   app.get("/scan", async (c) => {
     const habitatId = readData().keplerRegistration?.habitatId;
     if (!habitatId) throw new Error("Habitat is not registered with Kepler.");
+    const eva = getEvaStatus(); if (!eva.humanId) throw new Error("Deploy a human before scanning.");
     return Response.json(await fetchWorldScan({
       habitatId,
-      x: int(c.req.query("x"), "x"),
-      y: int(c.req.query("y"), "y"),
+      x: eva.x, y: eva.y,
       sensorStrength: bounded(c.req.query("sensorStrength"), "sensorStrength", 0, 100),
       radiusTiles: bounded(c.req.query("radiusTiles") ?? "0", "radiusTiles", 0, 5),
     }));

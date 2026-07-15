@@ -36,7 +36,7 @@ type ConstructionStatusJob = {
   blueprintId: string;
   remainingTicks: number;
 };
-export type ScanOptions = { x: number; y: number; strength: number; radius: number };
+export type ScanOptions = { strength: number; radius: number };
 
 export type HabitatApiClient = {
   createWebLoginCode: (token: string) => Promise<WebLoginCodeResponse>;
@@ -94,6 +94,9 @@ export type HabitatApiClient = {
   reportUnlocks: () => Promise<{ report: Record<string, unknown> }>;
   getServerLogs: () => Promise<{ logs: ServerLogEntry[] }>;
   scan: (options: ScanOptions) => Promise<Record<string, unknown>>;
+  listHumans: () => Promise<{ humans: unknown[] }>; moveHuman: (id: string, moduleId: string) => Promise<{ human: unknown }>;
+  getEva: () => Promise<{ eva: unknown }>; evaDeploy: (humanId: string) => Promise<{ eva: unknown }>; evaMove: (x: number, y: number) => Promise<{ eva: unknown }>; evaDock: () => Promise<{ eva: unknown }>;
+  collect: (quantityKg: number) => Promise<Record<string, unknown>>; listAlerts: () => Promise<{ alerts: unknown[] }>; acknowledgeAlert: (id: string) => Promise<{ alert: unknown }>;
 };
 
 export function createHabitatApiClient(baseUrl = process.env.HABITAT_API_BASE_URL ?? "http://localhost:8787"): HabitatApiClient {
@@ -178,8 +181,6 @@ export function createHabitatApiClient(baseUrl = process.env.HABITAT_API_BASE_UR
     reportUnlocks: () => request<{ report: Record<string, unknown> }>("POST", "/unlocks/report"),
     scan: async (options) => {
       const query = new URLSearchParams({
-        x: String(options.x),
-        y: String(options.y),
         sensorStrength: String(options.strength),
         radiusTiles: String(options.radius),
       });
@@ -189,6 +190,9 @@ export function createHabitatApiClient(baseUrl = process.env.HABITAT_API_BASE_UR
         ? wrapped as Record<string, unknown>
         : response;
     },
+    listHumans: () => request("GET", "/humans"), moveHuman: (id, moduleId) => request("POST", `/humans/${id}/move`, { moduleId }),
+    getEva: () => request("GET", "/eva"), evaDeploy: (humanId) => request("POST", "/eva/deploy", { humanId }), evaMove: (x, y) => request("POST", "/eva/move", { x, y }), evaDock: () => request("POST", "/eva/dock"),
+    collect: (quantityKg) => request("POST", "/collect", { quantityKg }), listAlerts: () => request("GET", "/alerts"), acknowledgeAlert: (id) => request("POST", `/alerts/${id}/acknowledge`),
     getServerLogs: async () => {
       try {
         return await request<{ logs: ServerLogEntry[] }>("GET", "/server/logs");

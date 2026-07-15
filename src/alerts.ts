@@ -1,0 +1,7 @@
+import { randomUUID } from "node:crypto";
+import { HabitatAlert } from "./types";
+import { readData, writeData } from "./storage";
+export function listAlerts(): HabitatAlert[] { return readData().alerts ?? []; }
+export function observeAlert(key: string, severity: string, source: string, subjectHumanId?: string): HabitatAlert { const data = readData(), now = new Date().toISOString(); const old = (data.alerts ?? []).find((a) => a.key === key && a.status !== "resolved"); const alert = old ? { ...old, lastObservedAt: now, occurrenceCount: old.occurrenceCount + 1 } : { id: randomUUID(), key, severity, source, status: "open" as const, createdAt: now, lastObservedAt: now, occurrenceCount: 1, subjectHumanId }; writeData({ ...data, alerts: [...(data.alerts ?? []).filter((a) => a.id !== alert.id), alert] }); return alert; }
+export function resolveAlert(key: string): void { const data = readData(); writeData({ ...data, alerts: (data.alerts ?? []).map((a) => a.key === key && a.status !== "resolved" ? { ...a, status: "resolved" as const, lastObservedAt: new Date().toISOString() } : a) }); }
+export function acknowledgeAlert(id: string): HabitatAlert { const data = readData(); const alert = (data.alerts ?? []).find((a) => a.id === id); if (!alert) throw new Error(`Alert "${id}" was not found.`); const updated = { ...alert, status: "acknowledged" as const }; writeData({ ...data, alerts: (data.alerts ?? []).map((a) => a.id === id ? updated : a) }); return updated; }
