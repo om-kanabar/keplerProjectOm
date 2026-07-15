@@ -75,6 +75,13 @@ export function registerAuthRoutes(app: Hono): void {
     return Response.json({ authenticated: true });
   });
 
+  app.delete("/auth/web/session", (c) => {
+    const sessionToken = readCookie(c.req.header("Cookie"), "habitat_session");
+    if (sessionToken) webSessions.revoke(hashSecret(sessionToken));
+    c.header("Set-Cookie", "habitat_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict");
+    return c.json({ authenticated: false });
+  });
+
   app.get("/auth/web/sessions", (c) => {
     const suppliedToken = readBearerToken(c.req.header("Authorization"));
     if (!suppliedToken || !tokensMatch(suppliedToken, getKeplerToken())) {

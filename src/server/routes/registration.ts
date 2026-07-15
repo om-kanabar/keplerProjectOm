@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { listModules } from "../../modules";
+import { getCurrentPowerSummary, getModulePowerDrawKw } from "../../tick";
+import { HabitatPowerSummary } from "../../types";
 import { createRegistration, deleteRegistration, getRegistration, syncRegisteredHabitatState } from "../services/registration-service";
 
 export function registerRegistrationRoutes(app: Hono): void {
@@ -16,7 +18,11 @@ export function registerRegistrationRoutes(app: Hono): void {
     const registration = await getRegistration();
     return Response.json({
       registration: registration ?? null,
-      modules: listModules(),
+      modules: listModules().map((module) => ({
+        ...module,
+        powerDrawKw: getModulePowerDrawKw(module),
+      })),
+      power: registration ? await getCurrentPowerSummary() : emptyPowerSummary(),
     });
   });
 
@@ -31,4 +37,16 @@ export function registerRegistrationRoutes(app: Hono): void {
     const registration = await deleteRegistration();
     return Response.json({ registration });
   });
+}
+
+function emptyPowerSummary(): HabitatPowerSummary {
+  return {
+    generationKw: 0,
+    consumptionKw: 0,
+    netPowerKw: 0,
+    batteryChargeKwh: 0,
+    batteryCapacityKwh: 0,
+    batteryReserveKwh: 0,
+    solar: { irradianceWPerM2: null, condition: null },
+  };
 }

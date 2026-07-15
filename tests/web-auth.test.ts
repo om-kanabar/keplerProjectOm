@@ -102,6 +102,22 @@ describe("web authentication", () => {
     expect(reusedResponse.status).toBe(401);
   });
 
+  test("logs out by revoking the current browser session", async () => {
+    process.env.KEPLER_WORLD_TOKEN = "test-kepler-token";
+    const { createApp } = await import("../src/server/app");
+    const app = createApp();
+    const issueResponse = await app.request("/auth/web", { method: "POST", headers: { Authorization: "Bearer test-kepler-token" } });
+    const { code } = await issueResponse.json() as { code: string };
+    const verifyResponse = await app.request("/auth/web/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
+    const sessionCookie = verifyResponse.headers.get("Set-Cookie")?.split(";")[0] ?? "";
+
+    const logoutResponse = await app.request("/auth/web/session", { method: "DELETE", headers: { Cookie: sessionCookie } });
+    expect(logoutResponse.status).toBe(200);
+    expect(String(logoutResponse.headers.get("Set-Cookie"))).toContain("Max-Age=0");
+    const sessionResponse = await app.request("/auth/web/session", { headers: { Cookie: sessionCookie } });
+    expect(sessionResponse.status).toBe(401);
+  });
+
   test("persists sessions across app restarts and lists metadata without secrets", async () => {
     process.env.KEPLER_WORLD_TOKEN = "test-kepler-token";
     const { createApp } = await import("../src/server/app");

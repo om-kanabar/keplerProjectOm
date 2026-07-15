@@ -4,6 +4,7 @@ import { readData, writeData } from "./storage";
 import { drainEvaForTicks } from "./eva";
 import {
   BatteryRechargeResult,
+  HabitatPowerSummary,
   HabitatModule,
   RuntimeAttributes,
   SolarChargingReason,
@@ -50,6 +51,27 @@ export function runBatteryRechargeSimulation(requestedTicks: number): BatteryRec
 
 export function isBatteryModule(module: HabitatModule): boolean {
   return BATTERY_BLUEPRINT_IDS.has(module.blueprintId);
+}
+
+export async function getCurrentPowerSummary(): Promise<HabitatPowerSummary> {
+  const modules = readData().modules ?? [];
+  const solarEnvironment = await readSolarEnvironment();
+  const batteries = modules.filter(isBatteryModule);
+  const generationKw = calculateAvailableSolarGenerationKw(modules, solarEnvironment);
+  const consumptionKw = calculateTotalPowerDrawKw(modules);
+
+  return {
+    generationKw,
+    consumptionKw,
+    netPowerKw: generationKw - consumptionKw,
+    batteryChargeKwh: sumBatteryMetric(batteries, "currentEnergyKwh"),
+    batteryCapacityKwh: sumBatteryMetric(batteries, "energyStorageKwh"),
+    batteryReserveKwh: sumBatteryMetric(batteries, "reserveKwh"),
+    solar: {
+      irradianceWPerM2: solarEnvironment.irradianceWPerM2,
+      condition: solarEnvironment.condition,
+    },
+  };
 }
 
 function runPowerFlowSimulation(
@@ -339,9 +361,7 @@ function applySolarChargingForCompletedTick(
     return { modules, energyAddedKwh: 0, reason: "no_usable_irradiance" };
   }
 
-  const totalPowerGenerationKw = onlineSolarModules.reduce((sum, module) => sum + getModulePowerGenerationKw(module), 0);
-  const solarMultiplier = solarEnvironment.irradianceWPerM2 / CLEAR_DAY_IRRADIANCE_W_PER_M2;
-  const generatedKwhPerTick = totalPowerGenerationKw * solarMultiplier * SOLAR_EFFICIENCY / 3600;
+  const generatedKwhPerTick = calculateAvailableSolarGenerationKw(modules, solarEnvironment) / 3600;
 
   if (generatedKwhPerTick <= TICK_RATIO_EPSILON) {
     return { modules, energyAddedKwh: 0, reason: "no_usable_irradiance" };
@@ -429,6 +449,22 @@ function isSolarModule(module: HabitatModule): boolean {
 
 function getModulePowerGenerationKw(module: HabitatModule): number {
   return getFiniteNumber(module.runtimeAttributes.powerGenerationKw) ?? 0;
+}
+
+function calculateAvailableSolarGenerationKw(
+  modules: HabitatModule[],
+  solarEnvironment: SolarEnvironment,
+): number {
+  if (solarEnvironment.irradianceWPerM2 === null || solarEnvironment.irradianceWPerM2 <= 0) {
+    return 0;
+  }
+
+  const totalPowerGenerationKw = modules
+    .filter((module) => isSolarModule(module) && isOperationalForSolar(module))
+    .reduce((sum, module) => sum + getModulePowerGenerationKw(module), 0);
+  const solarMultiplier = solarEnvironment.irradianceWPerM2 / CLEAR_DAY_IRRADIANCE_W_PER_M2;
+
+  return totalPowerGenerationKw * solarMultiplier * SOLAR_EFFICIENCY;
 }
 
 function isOperationalForSolar(module: HabitatModule): boolean {

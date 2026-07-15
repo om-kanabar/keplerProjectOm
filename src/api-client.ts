@@ -3,6 +3,7 @@ import {
   BatteryRechargeResult,
   BlueprintReference,
   HabitatModule,
+  HabitatModuleTelemetry,
   InventoryRecord,
   KeplerRegistration,
   ResourceReference,
@@ -23,7 +24,7 @@ type RegistrationResponse = {
 
 type StatusResponse = {
   registration: KeplerRegistration | null;
-  modules: HabitatModule[];
+  modules: HabitatModuleTelemetry[];
 };
 
 type WebLoginCodeResponse = {

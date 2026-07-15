@@ -10,6 +10,17 @@ const timeCommit = document.querySelector('#time-commit');
 const minimumAuthLoadingTime = 1500;
 const authCodeLength = 24;
 const localAdminCookieName = 'habitat_local_admin';
+const dashboardBundleVersion = '20260715.5';
+let dashboardMounted = false;
+
+function isAuthSkipPreview() {
+    return (
+        window.location.hostname === '127.0.0.1' &&
+        new URLSearchParams(window.location.search).has('authskip')
+    );
+}
+
+window.habitatAuthSkipPreview = isAuthSkipPreview();
 
 function isLocalAdminAuth(code) {
     const localHost = window.location.hostname === 'localhost';
@@ -93,6 +104,15 @@ async function hasWebSession() {
     return session.authenticated === true;
 }
 
+async function hasReachableHabitat() {
+    try {
+        const response = await fetch('/status', { credentials: 'same-origin' });
+        return response.ok;
+    } catch {
+        return false;
+    }
+}
+
 function showAuthentication() {
     dashboardShell.hidden = true;
     authPage.hidden = false;
@@ -107,9 +127,16 @@ function showAuthentication() {
 authCodeInput?.addEventListener('input', renderPasscodeDots);
 renderPasscodeDots();
 
-function showDashboard() {
+async function showDashboard() {
     authPage.hidden = true;
     dashboardShell.hidden = false;
+    if (!dashboardMounted) {
+        const { mountDashboard } = await import(`/dashboard/dashboard.js?v=${dashboardBundleVersion}`);
+        const root = document.querySelector('#dashboard-root');
+        if (!root) throw new Error('Habitat dashboard mount point is unavailable.');
+        mountDashboard(root);
+        dashboardMounted = true;
+    }
     window.dispatchEvent(new Event('habitat:ready'));
 }
 
@@ -125,14 +152,26 @@ async function initializeDashboard() {
     await loadBuildMetadata();
 
     try {
+        if (window.habitatAuthSkipPreview) {
+            await showDashboard();
+            return;
+        }
+
+        if (!(await hasReachableHabitat())) {
+            window.dispatchEvent(new CustomEvent('habitat:startup-error', {
+                detail: { message: 'UNABLE TO REACH HABITAT SERVER' },
+            }));
+            return;
+        }
+
         if (await hasWebSession()) {
-            showDashboard();
+            await showDashboard();
         } else {
             showAuthentication();
         }
     } catch {
         window.dispatchEvent(new CustomEvent('habitat:startup-error', {
-            detail: { message: 'UNABLE TO REACH HABITAT SERVER' },
+            detail: { message: 'Unable to load Habitat dashboard.' },
         }));
     }
 }
@@ -144,7 +183,7 @@ authForm?.addEventListener('submit', async (event) => {
 
     if (isLocalAdminAuth(code)) {
         createLocalAdminSession();
-        showDashboard();
+        await showDashboard();
         return;
     }
 
@@ -167,7 +206,7 @@ authForm?.addEventListener('submit', async (event) => {
         if (!response.ok) {
             throw new Error(body.error?.message ?? `Authentication failed (HTTP ${response.status}).`);
         }
-        showDashboard();
+        await showDashboard();
     } catch (error) {
         await keepAuthLoadingVisible(verificationStartedAt);
         if (authCodeInput) authCodeInput.value = '';

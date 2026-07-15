@@ -17,6 +17,13 @@ describe("web login page", () => {
     expect(html).toContain('src="app.js"');
     expect(app).toContain("/auth/web/session");
     expect(app).toContain("/auth/web/verify");
+    expect(app).toContain("/status");
+    expect(app).toContain("hasReachableHabitat");
+    expect(app).toContain("habitat:startup-error");
+    expect(app).toContain("UNABLE TO REACH HABITAT SERVER");
+    expect(app).toContain("Unable to load Habitat dashboard.");
+    expect(app).toContain("dashboardBundleVersion");
+    expect(app).toContain("dashboardBundleVersion = '20260715.4'");
     expect(app).toContain("habitat:auth-required");
     expect(app).toContain("habitat:ready");
     expect(app).toContain("is-verifying");

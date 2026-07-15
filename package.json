@@ -8,14 +8,19 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "server": "bun ./src/server/index.ts"
+    "build:dashboard": "NODE_ENV=production vite build",
+    "server": "bun run build:dashboard && bun ./src/server/index.ts"
   },
   "dependencies": {
     "commander": "^14.0.0",
-    "hono": "^4.12.29"
+    "hono": "^4.12.29",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
-    "typescript": "^5.9.2"
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^5.9.2",
+    "vite": "^8.1.4"
   }
 }

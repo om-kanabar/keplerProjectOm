@@ -21,6 +21,7 @@ type WebSessionRow = {
 export type WebSessionStore = {
   create: (tokenHash: string, expiresAt: Date) => WebSessionMetadata;
   getActive: (tokenHash: string) => WebSessionMetadata | undefined;
+  revoke: (tokenHash: string) => void;
   listActive: () => WebSessionMetadata[];
 };
 
@@ -77,6 +78,9 @@ export function createWebSessionStore(): WebSessionStore {
       });
 
       return toMetadata({ ...session, last_seen_at: lastSeenAt });
+    },
+    revoke(tokenHash) {
+      db.query("DELETE FROM web_sessions WHERE token_hash = $tokenHash").run({ $tokenHash: tokenHash });
     },
     listActive() {
       removeExpiredSessions();

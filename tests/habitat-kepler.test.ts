@@ -521,9 +521,115 @@ describe("Local Habitat API", () => {
     const response = await app.request("/registration");
 
     expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ registration: null });
+  });
+
+  test("GET /status returns an empty power snapshot when no habitat is registered", async () => {
+    process.chdir(workdir);
+    const { createApp } = await import("../src/server/app");
+
+    const response = await createApp().request("/status");
+
+    expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       registration: null,
+      modules: [],
+      power: {
+        generationKw: 0,
+        consumptionKw: 0,
+        netPowerKw: 0,
+        batteryChargeKwh: 0,
+        batteryCapacityKwh: 0,
+        batteryReserveKwh: 0,
+        solar: { irradianceWPerM2: null, condition: null },
+      },
     });
+  });
+
+  test("GET /status returns server-calculated power and solar telemetry", async () => {
+    process.chdir(workdir);
+    writeData({
+      keplerRegistration: {
+        habitatUuid: "11111111-1111-4111-8111-111111111111",
+        habitatId: "habitat-server-123",
+        displayName: "Artemis Ridge",
+      },
+      modules: [
+        {
+          id: "battery-1",
+          blueprintId: "basic-battery",
+          displayName: "Battery",
+          connectedTo: [],
+          runtimeAttributes: {
+            status: "online",
+            currentEnergyKwh: 300,
+            energyStorageKwh: 500,
+            reserveKwh: 60,
+            powerDrawKw: { offline: 0, online: 0.5 },
+          },
+          capabilities: ["power-storage"],
+          source: "starter",
+        },
+        {
+          id: "solar-1",
+          blueprintId: "small-solar-array",
+          displayName: "Solar Array",
+          connectedTo: [],
+          runtimeAttributes: { status: "online", powerGenerationKw: 12 },
+          capabilities: ["power-generation"],
+          source: "local",
+        },
+        {
+          id: "life-support-1",
+          blueprintId: "life-support",
+          displayName: "Life Support",
+          connectedTo: [],
+          runtimeAttributes: { status: "active", powerDrawKw: { offline: 0, active: 4 } },
+          capabilities: [],
+          source: "starter",
+        },
+      ],
+    });
+
+    const previousBaseUrl = process.env.KEPLER_WORLD_BASE_URL;
+    const previousToken = process.env.KEPLER_PLANET_TOKEN;
+    const originalFetch = globalThis.fetch;
+    process.env.KEPLER_WORLD_BASE_URL = "http://kepler.test";
+    process.env.KEPLER_PLANET_TOKEN = "test-token";
+    globalThis.fetch = (async (input) => {
+      const path = new URL(typeof input === "string" ? input : input.url).pathname;
+      if (path === "/habitats/habitat-server-123/registration") {
+        return Response.json({ habitat: { id: "habitat-server-123", displayName: "Artemis Ridge" } });
+      }
+      if (path === "/world/solar-irradiance") {
+        return Response.json({ solarIrradiance: { wPerM2: 450, condition: "partly cloudy" } });
+      }
+      return new Response("Not found", { status: 404 });
+    }) as typeof fetch;
+
+    try {
+      const { createApp } = await import("../src/server/app");
+      const response = await createApp().request("/status");
+      const payload = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(payload.power).toEqual({
+        generationKw: 3,
+        consumptionKw: 4,
+        netPowerKw: -1,
+        batteryChargeKwh: 300,
+        batteryCapacityKwh: 500,
+        batteryReserveKwh: 60,
+        solar: { irradianceWPerM2: 450, condition: "partly cloudy" },
+      });
+      expect(payload.modules).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "life-support-1", powerDrawKw: 4 }),
+      ]));
+    } finally {
+      globalThis.fetch = originalFetch;
+      process.env.KEPLER_WORLD_BASE_URL = previousBaseUrl;
+      process.env.KEPLER_PLANET_TOKEN = previousToken;
+    }
   });
 
   test("GET /status hydrates starter modules from Kepler when the local server has registration but no modules", async () => {
@@ -585,6 +691,7 @@ describe("Local Habitat API", () => {
           },
           capabilities: ["habitat-command"],
           source: "starter",
+          powerDrawKw: 0,
         },
       ]);
       expect((readData().modules as unknown[] | undefined)?.length).toBe(1);

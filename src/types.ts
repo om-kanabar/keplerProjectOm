@@ -45,6 +45,10 @@ export type HabitatModule = StarterModulePayload & {
   source: "starter" | "local";
 };
 
+export type HabitatModuleTelemetry = HabitatModule & {
+  powerDrawKw: number;
+};
+
 export type ConstructionJob = {
   blueprintId: string;
   outputModuleId: string;
@@ -68,6 +72,19 @@ export type SolarChargingResult = {
   irradianceWPerM2: number | null;
   condition: string | null;
   energyAddedKwh: number;
+};
+
+export type HabitatPowerSummary = {
+  generationKw: number;
+  consumptionKw: number;
+  netPowerKw: number;
+  batteryChargeKwh: number;
+  batteryCapacityKwh: number;
+  batteryReserveKwh: number;
+  solar: {
+    irradianceWPerM2: number | null;
+    condition: string | null;
+  };
 };
 
 export type TickSimulationResult = {

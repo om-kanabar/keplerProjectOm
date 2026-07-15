@@ -737,17 +737,6 @@ body.is-ready .dashboard-shell {
     opacity: 1;
 }
 
-.loading-status {
-    display: flex;
-    justify-content: center;
-    width: 50vw;
-    color: color-mix(in srgb, var(--white) 58%, transparent);
-    font-family: 'Space Mono', 'Menlo', 'Courier New', Courier, monospace;
-    font-size: 0.9rem;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-}
-
 .loading-location {
     margin-top: 0.8rem;
     color: color-mix(in srgb, var(--white) 32%, transparent);
