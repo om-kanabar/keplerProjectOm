@@ -78,6 +78,11 @@
 .info-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(15rem, .9fr); gap: 2.8rem; }
 .blueprint-list { border-top: 1px solid var(--dashboard-line); }
 .blueprint-list article { padding: 1rem 0; border-bottom: 1px solid var(--dashboard-line); }
+.blueprint-row { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.blueprint-detail { margin-top: 1.4rem; padding: 1.2rem; border: 1px solid var(--dashboard-line); border-radius: 8px; background: var(--dashboard-panel); }
+.blueprint-detail h3 { margin: .45rem 0 0; font-size: 1.05rem; font-weight: 500; }
+.blueprint-detail h4 { margin: 1.1rem 0 .5rem; font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.blueprint-detail ul { margin: 0 0 1rem; padding-left: 1.1rem; color: var(--dashboard-muted); font: .68rem var(--dashboard-font-mono); line-height: 1.8; }
 .blueprint-list h3 { margin: 0; font-size: .9rem; font-weight: 500; }
 .blueprint-list p { margin: .4rem 0; color: var(--dashboard-muted); font-size: .75rem; line-height: 1.45; }
 .blueprint-list small { color: var(--dashboard-accent); }

@@ -1,6 +1,6 @@
 export type DashboardMode = "regular" | "display" | "info";
 export type AlertSeverity = "informational" | "warning" | "critical";
-export type ModuleStatus = "online" | "standby" | "degraded" | "offline" | "under-construction";
+export type ModuleStatus = "online" | "standby" | "degraded" | "active" | "offline" | "damaged" | "under-construction";
 export type WorkKind = "construction" | "research" | "maintenance" | "mission";
 
 export type ResourceSummary = {
@@ -115,7 +115,7 @@ function normalizeAlert(alert: any): HabitatAlertView {
 function normalizeModule(module: any): ModuleSummary {
   const rawStatus = String(module?.runtimeAttributes?.status ?? "offline");
   const underConstruction = module?.runtimeAttributes?.constructionJob != null;
-  const status: ModuleStatus = underConstruction ? "under-construction" : rawStatus === "idle" ? "online" : rawStatus === "active" ? "degraded" : rawStatus === "online" || rawStatus === "offline" ? rawStatus : "standby";
+  const status: ModuleStatus = underConstruction ? "under-construction" : rawStatus === "idle" ? "online" : rawStatus === "active" ? "active" : rawStatus === "damaged" ? "damaged" : rawStatus === "online" || rawStatus === "offline" ? rawStatus : "standby";
   return { id: String(module?.id), label: String(module?.displayName ?? module?.id ?? "Unnamed module"), blueprintId: String(module?.blueprintId ?? "module"), status, powerDrawKw: Number(module?.powerDrawKw ?? 0), detail: `${format(Number(module?.powerDrawKw ?? 0))} kW draw` };
 }
 

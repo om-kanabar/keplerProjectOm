@@ -70,7 +70,7 @@ export function getKeplerToken(): string {
     );
   }
 
-  return token;
+  return token.trimStart();
 }
 
 async function requestKepler<T>(

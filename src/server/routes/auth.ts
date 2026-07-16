@@ -97,7 +97,7 @@ function readBearerToken(authorization: string | undefined): string | undefined 
     return undefined;
   }
 
-  return authorization.slice("Bearer ".length);
+  return authorization.slice("Bearer ".length).trimStart();
 }
 
 function tokensMatch(suppliedToken: string, configuredToken: string): boolean {
