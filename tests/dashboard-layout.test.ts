@@ -18,21 +18,20 @@ describe("Habitat operator console layout", () => {
     expect(dashboard).not.toContain("AI chat");
   });
 
-  test("renders Display Mode as an ambient fullscreen view while keeping Info Mode reserved", () => {
+  test("renders Display Mode as an ambient fullscreen view", () => {
     const dashboard = readProjectFile("web/src/main.tsx");
 
     expect(dashboard).toContain('"Display"');
-    expect(dashboard).toContain('"Info"');
     expect(dashboard).toContain('className="mode-slider"');
     expect(dashboard).toContain('aria-label="Habitat display mode"');
     expect(dashboard).toContain('setActiveMode(mode.id)');
     expect(dashboard).toContain("DisplayModeView");
     expect(dashboard).toContain('activeMode === "display"');
-    expect(dashboard).toContain('activeMode === "info"');
     expect(dashboard).toContain("30_000");
     expect(dashboard).toContain("display-chrome-hidden");
     expect(dashboard).toContain("Exit display mode");
-    expect(dashboard).toContain("Info Mode");
+    expect(dashboard).not.toContain('id: "info"');
+    expect(dashboard).not.toContain("ModePlaceholder");
     const styles = readProjectFile("web/src/dashboard.css");
     expect(styles).toContain("display-stars-drift");
     expect(styles).toContain("display-mode-exit");
@@ -64,6 +63,8 @@ describe("Habitat operator console layout", () => {
     expect(dashboard).toContain("50 by 50 EVA movement map");
     expect(dashboard).toContain("EVAKeyboardControls");
     expect(dashboard).toContain('"w", "a", "s", "d"');
+    expect(dashboard).toContain("habitat:scan");
+    expect(dashboard).toContain("is-scanned");
   });
 
   test("loads blueprint details and catalog resources from the live endpoints", () => {
@@ -71,7 +72,8 @@ describe("Habitat operator console layout", () => {
 
     expect(dashboard).toContain('request<{ blueprint: Blueprint }>(`/catalog/blueprints/${blueprintId}`)');
     expect(dashboard).toContain('request<{ resources: CatalogResource[] }>("/resources")');
-    expect(dashboard).toContain('request<{ inventory: InventoryItem[] }>("/inventory")');
+    expect(dashboard).toContain('request<{ inventory: InventoryPayload }>("/inventory")');
+    expect(dashboard).toContain("Object.entries(raw ?? {})");
     expect(dashboard).toContain("amount > 0");
     expect(dashboard).toContain("Resources required");
     expect(dashboard).toContain("Build");
