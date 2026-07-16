@@ -13,8 +13,45 @@ const modes: Array<{ id: DashboardMode; label: string; detail: string }> = [
 ];
 const subsystems = ["Overview", "Modules", "Blueprints", "Resources", "Inventory", "Construction", "Alerts", "Forecast", "Humans", "Scan"];
 type Subsystem = typeof subsystems[number];
-type Blueprint = { blueprintId: string; displayName: string; description?: string; buildTicks?: number; inputs?: Record<string, unknown> };
+type Blueprint = {
+  id?: string;
+  blueprintId: string;
+  displayName: string;
+  description?: string;
+  status?: string;
+  output?: Record<string, unknown>;
+  inputs?: Record<string, unknown>;
+  buildTicks?: number;
+  repeatable?: boolean;
+  capabilities?: string[];
+  requiredFacility?: string | Record<string, unknown>;
+  runtimeAttributes?: Record<string, unknown>;
+} & Record<string, unknown>;
+type CatalogResource = {
+  id?: string;
+  resourceId: string;
+  displayName?: string;
+  name?: string;
+  status?: string;
+  rarity?: string;
+  amount?: number;
+} & Record<string, unknown>;
 type InventoryItem = { resourceId: string; amount: number };
+
+async function loadBlueprintDetails(blueprintId: string): Promise<Blueprint> {
+  const response = await request<{ blueprint: Blueprint }>(`/catalog/blueprints/${blueprintId}`);
+  return response.blueprint;
+}
+
+async function loadCatalogResources(): Promise<CatalogResource[]> {
+  const response = await request<{ resources: CatalogResource[] }>("/resources");
+  return response.resources;
+}
+
+async function loadInventoryItems(): Promise<InventoryItem[]> {
+  const response = await request<{ inventory: InventoryItem[] }>("/inventory");
+  return response.inventory.filter((item) => item.amount > 0);
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: "same-origin", ...options, headers: { "Content-Type": "application/json", ...options?.headers } });
@@ -48,7 +85,8 @@ function Dashboard() {
   const [activeMode, setActiveMode] = useState<DashboardMode>("regular");
   const [activeSubsystem, setActiveSubsystem] = useState<Subsystem>("Overview");
   const [blueprints, setBlueprints] = useState<Blueprint[] | null>(previewMode ? previewBlueprints : null);
-  const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
+  const [catalogResources, setCatalogResources] = useState<CatalogResource[] | null>(previewMode ? previewCatalogResources : null);
+  const [inventory, setInventory] = useState<InventoryItem[] | null>(previewMode ? previewInventory : null);
   const unregisterDialog = useRef<HTMLDialogElement>(null);
 
   const refresh = async () => {
@@ -61,8 +99,9 @@ function Dashboard() {
   useEffect(() => {
     if (previewMode) return;
     if (activeSubsystem === "Blueprints" && !blueprints) void request<{ blueprints: Blueprint[] }>("/catalog/blueprints").then((result) => setBlueprints(result.blueprints)).catch(() => setBlueprints([]));
-    if (activeSubsystem === "Inventory" && !inventory) void request<{ inventory: InventoryItem[] }>("/inventory").then((result) => setInventory(result.inventory)).catch(() => setInventory([]));
-  }, [activeSubsystem, blueprints, inventory]);
+    if (activeSubsystem === "Resources" && !catalogResources) void loadCatalogResources().then((resources) => setCatalogResources(resources)).catch(() => setCatalogResources([]));
+    if (activeSubsystem === "Inventory" && !inventory) void loadInventoryItems().then((items) => setInventory(items)).catch(() => setInventory([]));
+  }, [activeSubsystem, blueprints, catalogResources, inventory, previewMode]);
 
   const register = async () => {
     if (!name.trim()) return;
@@ -95,7 +134,7 @@ function Dashboard() {
       <div className="sidebar-footer"><span className={`connection-dot ${snapshot.connection}`} aria-hidden="true" /> <span>{snapshot.connection === "connected" ? snapshot.registration.status ?? "connected" : "disconnected"}</span></div>
     </aside>
     <section className="console-content"><header className="console-header"><div><p className="dashboard-label">{snapshot.registration.displayName} / habitat</p><h1 id="dashboard-title">{modes.find((mode) => mode.id === activeMode)?.label}</h1></div><div className="dashboard-actions"><button className="button" disabled={loading} onClick={() => void refresh()}>Refresh</button><button className="button" onClick={() => void logout()}>Log out</button><button className="button button-danger" onClick={() => unregisterDialog.current?.showModal()}>Unregister</button></div></header>
-      <section id={`${activeMode}-panel`} role="tabpanel" aria-label={`${activeMode} mode`} className="console-panel">{activeMode !== "regular" ? <ModePlaceholder mode={activeMode} /> : activeSubsystem === "Overview" ? <RegularModeOverview snapshot={snapshot} onStatusChange={changeModuleStatus} /> : <SubsystemView name={activeSubsystem} snapshot={snapshot} blueprints={blueprints} inventory={inventory} onStatusChange={changeModuleStatus} />}</section>
+      <section id={`${activeMode}-panel`} role="tabpanel" aria-label={`${activeMode} mode`} className="console-panel">{activeMode !== "regular" ? <ModePlaceholder mode={activeMode} /> : activeSubsystem === "Overview" ? <RegularModeOverview snapshot={snapshot} onStatusChange={changeModuleStatus} /> : <SubsystemView name={activeSubsystem} snapshot={snapshot} blueprints={blueprints} catalogResources={catalogResources} inventory={inventory} onStatusChange={changeModuleStatus} />}</section>
       {message && <p className="dashboard-feedback success" role="status">{message}</p>}
     </section>
     <dialog className="dashboard-dialog" ref={unregisterDialog}><p className="dashboard-label">Registration</p><h2>Unregister {snapshot.registration.displayName}?</h2><p>This removes the current registration through the Habitat API.</p><div className="dialog-actions"><button className="button" onClick={() => unregisterDialog.current?.close()}>Cancel</button><button className="button button-danger" onClick={() => { unregisterDialog.current?.close(); void unregister(); }}>Unregister</button></div></dialog>
@@ -105,37 +144,61 @@ function Dashboard() {
 function RegistrationState({ name, message, setName, register }: { name: string; message: string | null; setName: (name: string) => void; register: () => void }) { return <main className="habitat-dashboard state-page"><section className="registration-intro"><p className="dashboard-label">Habitat</p><h1 id="dashboard-title">Not registered.</h1><p>Connect this display to a Habitat to see its live state.</p></section><section className="empty-state"><h2>Choose a Habitat name.</h2><form className="registration-form" onSubmit={(event) => { event.preventDefault(); register(); }}><label htmlFor="habitat-name">Habitat name</label><input id="habitat-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Habitat name" required /><button className="button button-primary">Register</button></form>{message && <p className="dashboard-feedback" role="status">{message}</p>}</section></main>; }
 
 function ModePlaceholder({ mode }: { mode: DashboardMode }) { const label = mode === "display" ? "Display Mode" : "Info Mode"; return <section className="mode-placeholder"><p className="dashboard-label">{label}</p><h2>This mode is connected.</h2><p>{label} is reserved for its own focused experience. Regular Mode remains the operating view for now.</p></section>; }
-function SubsystemView({ name, snapshot, blueprints, inventory, onStatusChange }: { name: Subsystem; snapshot: RegularModeSnapshot; blueprints: Blueprint[] | null; inventory: InventoryItem[] | null; onStatusChange: (moduleId: string, status: "online" | "offline" | "active") => void }) {
+function SubsystemView({ name, snapshot, blueprints, catalogResources, inventory, onStatusChange }: { name: Subsystem; snapshot: RegularModeSnapshot; blueprints: Blueprint[] | null; catalogResources: CatalogResource[] | null; inventory: InventoryItem[] | null; onStatusChange: (moduleId: string, status: "online" | "offline" | "active") => void }) {
   if (name === "Modules") return <section className="subsystem-view"><SectionHeading id="modules-view-heading" label="Modules" detail={`${snapshot.modules.length} installed`} /><div className="module-grid">{snapshot.modules.length ? snapshot.modules.map((module) => <ModuleCard key={module.id} module={module} onStatusChange={onStatusChange} />) : <EmptyState text="No modules are reported by Habitat yet." />}</div></section>;
   if (name === "Alerts") return <section className="subsystem-view"><AlertSection alerts={snapshot.alerts} /></section>;
-  if (name === "Resources") return <section className="subsystem-view"><SectionHeading id="resources-view-heading" label="Resources" detail="Current habitat reserves" /><div className="resource-grid">{snapshot.resources.map((resource) => <ResourceCard key={resource.id} resource={resource} />)}</div></section>;
+  if (name === "Resources") return <section className="subsystem-view"><SectionHeading id="resources-view-heading" label="Resources" detail={catalogResources ? `${catalogResources.length} resource types` : "Loading catalog"} />{catalogResources === null ? <LoadingState label="Loading resources" /> : catalogResources.length ? <div className="table-frame"><table className="dashboard-table"><thead><tr><th>Name</th><th>Resource ID</th><th>Status</th><th>Amount</th></tr></thead><tbody>{catalogResources.map((resource) => <tr key={resource.resourceId}><td>{resource.displayName ?? resource.name ?? resource.resourceId}</td><td>{resource.resourceId}</td><td>{resource.status ?? resource.rarity ?? "unknown"}</td><td>{resource.amount ?? 0}</td></tr>)}</tbody></table></div> : <EmptyState text="No resources found." />}</section>;
   if (name === "Construction") return <section className="subsystem-view"><SectionHeading id="construction-view-heading" label="Construction" detail="Active work" />{snapshot.activeWork.length ? <div className="work-list">{snapshot.activeWork.map((work) => <article className="work-row" key={work.id}><div><p className="dashboard-label">{work.kind}</p><h3>{work.label}</h3><p>{work.detail}</p></div>{work.percent !== undefined && <strong>{work.percent}%</strong>}</article>)}</div> : <EmptyState text="No construction is currently active." />}</section>;
   if (name === "Forecast") return <section className="subsystem-view"><SectionHeading id="forecast-view-heading" label="Forecast" detail="Surface conditions" /><div className="mode-placeholder"><p className="dashboard-label">Next conditions</p><h2>Solar outlook: clear.</h2><p>Current irradiance supports normal power generation. Detailed hourly forecasts will appear here when the weather feed is connected.</p></div></section>;
   if (name === "Humans") return <section className="subsystem-view"><SectionHeading id="humans-view-heading" label="Humans" detail="Crew overview" /><div className="mode-placeholder"><p className="dashboard-label">Crew manifest</p><h2>Habitat crew systems ready.</h2><p>Human locations, assignments, and EVA state will appear here from the crew service.</p></div></section>;
   if (name === "Scan") return <section className="subsystem-view"><SectionHeading id="scan-view-heading" label="Scan" detail="Explorer interface" /><div className="mode-placeholder"><p className="dashboard-label">Surface scan</p><h2>Explorer scan ready.</h2><p>Deploy a human and provide sensor strength and radius to scan nearby terrain through the Habitat CLI workflow.</p></div></section>;
   if (name === "Blueprints") return <BlueprintsView blueprints={blueprints} />;
-  if (name === "Inventory") return <section className="subsystem-view"><SectionHeading id="inventory-view-heading" label="Inventory" detail={inventory ? `${inventory.length} resource types` : "Loading inventory"} />{inventory === null ? <LoadingState label="Loading inventory" /> : inventory.length ? <div className="inventory-list">{inventory.map((item) => <article className="work-row" key={item.resourceId}><h3>{item.resourceId}</h3><strong>{item.amount}</strong></article>)}</div> : <EmptyState text="Inventory is currently empty." />}</section>;
+  if (name === "Inventory") return <section className="subsystem-view"><SectionHeading id="inventory-view-heading" label="Inventory" detail={inventory ? `${inventory.length} resource types` : "Loading inventory"} />{inventory === null ? <LoadingState label="Loading inventory" /> : inventory.length ? <div className="table-frame"><table className="dashboard-table"><thead><tr><th>Resource</th><th>Amount</th></tr></thead><tbody>{inventory.map((item) => <tr key={item.resourceId}><td>{item.resourceId}</td><td>{item.amount}</td></tr>)}</tbody></table></div> : <EmptyState text="No inventory found." />}</section>;
   return <section className="subsystem-view mode-placeholder"><p className="dashboard-label">{name}</p><h2>System view ready.</h2><p>This subsystem is connected to the Habitat navigation.</p></section>;
 }
 
 function BlueprintsView({ blueprints }: { blueprints: Blueprint[] | null }) {
-  const [selected, setSelected] = useState<Blueprint | null>(null);
+  const [selectedBlueprintId, setSelectedBlueprintId] = useState<string | null>(null);
+  const [selectedBlueprint, setSelectedBlueprint] = useState<Blueprint | null>(null);
+  const [selectedBlueprintError, setSelectedBlueprintError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const previewMode = window.habitatAuthSkipPreview === true;
+  const selectBlueprint = async (blueprint: Blueprint) => {
+    setSelectedBlueprintId(blueprint.blueprintId);
+    setSelectedBlueprintError(null);
+    setMessage(null);
+    setLoadingDetails(true);
+
+    if (previewMode) {
+      setSelectedBlueprint(blueprint);
+      setLoadingDetails(false);
+      return;
+    }
+
+    try {
+      setSelectedBlueprint(await loadBlueprintDetails(blueprint.blueprintId));
+    } catch (caught) {
+      setSelectedBlueprint(null);
+      setSelectedBlueprintError(caught instanceof Error ? caught.message : "Unable to load blueprint details.");
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
   const build = async () => {
-    if (!selected) return;
+    if (!selectedBlueprintId || !selectedBlueprint) return;
     if (previewMode) { setMessage("Preview mode cannot start construction."); return; }
     setBuilding(true); setMessage(null);
     try {
-      const readiness = await request<{ readiness?: { ready?: boolean; reason?: string } }>("/construction/readiness", { method: "POST", body: JSON.stringify({ blueprintId: selected.blueprintId }) });
+      const readiness = await request<{ readiness?: { ready?: boolean; reason?: string } }>("/construction/readiness", { method: "POST", body: JSON.stringify({ blueprintId: selectedBlueprintId }) });
       if (readiness.readiness?.ready === false) { setMessage(readiness.readiness.reason ?? "This blueprint is not ready to build."); return; }
-      await request("/construction/jobs", { method: "POST", body: JSON.stringify({ blueprintId: selected.blueprintId }) });
-      setMessage(`${selected.displayName} construction started.`);
+      await request("/construction/jobs", { method: "POST", body: JSON.stringify({ blueprintId: selectedBlueprintId }) });
+      setMessage(`${selectedBlueprint.displayName} construction started.`);
     } catch (caught) { setMessage(caught instanceof Error ? caught.message : "Unable to start construction. Check habitat readiness and resources."); }
     finally { setBuilding(false); }
   };
-  return <section className="subsystem-view"><SectionHeading id="blueprints-view-heading" label="Blueprints" detail={blueprints ? `${blueprints.length} available` : "Loading catalog"} />{blueprints === null ? <LoadingState label="Loading blueprint catalog" /> : <div className="blueprint-list">{blueprints.length ? blueprints.map((blueprint) => <article key={blueprint.blueprintId}><div className="blueprint-row"><div><h3>{blueprint.displayName}</h3><p>{blueprint.description ?? blueprint.blueprintId}</p></div><button className="button" type="button" onClick={() => { setSelected(blueprint); setMessage(null); }}>View details</button></div>{blueprint.buildTicks !== undefined && <small>{blueprint.buildTicks} build ticks</small>}</article>) : <EmptyState text="Blueprint catalog is unavailable." />}</div>}{selected && <div className="blueprint-detail"><p className="dashboard-label">Blueprint details</p><h3>{selected.displayName}</h3><p>{selected.description ?? "No description supplied."}</p><h4>Resources required</h4>{selected.inputs && Object.keys(selected.inputs).length ? <ul>{Object.entries(selected.inputs).map(([resource, amount]) => <li key={resource}>{resource}: {String(amount)}</li>)}</ul> : <p className="dashboard-feedback">Resource requirements were not supplied by the catalog.</p>}<button className="button button-primary" type="button" disabled={building} onClick={() => void build()}>{building ? <>Checking readiness <LoadingDots /></> : "Build"}</button>{message && <p className="dashboard-feedback" role="status">{message}</p>}</div>}</section>;
+  return <section className="subsystem-view"><SectionHeading id="blueprints-view-heading" label="Blueprints" detail={blueprints ? `${blueprints.length} available` : "Loading catalog"} />{blueprints === null ? <LoadingState label="Loading blueprint catalog" /> : <div className="blueprint-list">{blueprints.length ? blueprints.map((blueprint) => <article key={blueprint.blueprintId}><div className="blueprint-row"><div><h3>{blueprint.displayName}</h3><p>{blueprint.description ?? blueprint.blueprintId}</p></div><button className="button" type="button" onClick={() => void selectBlueprint(blueprint)}>View details</button></div>{blueprint.buildTicks !== undefined && <small>{blueprint.buildTicks} build ticks</small>}</article>) : <EmptyState text="Blueprint catalog is unavailable." />}</div>}{selectedBlueprintId && <div className="blueprint-detail"><p className="dashboard-label">Blueprint details</p>{loadingDetails && !selectedBlueprint ? <LoadingState label="Loading blueprint details" /> : selectedBlueprint ? <><h3>{selectedBlueprint.displayName}</h3><p>{selectedBlueprint.description ?? "No description supplied."}</p><dl className="blueprint-fields"><div><dt>ID</dt><dd>{formatBlueprintValue(selectedBlueprint.id)}</dd></div><div><dt>Blueprint ID</dt><dd>{selectedBlueprint.blueprintId}</dd></div><div><dt>Status</dt><dd>{formatBlueprintValue(selectedBlueprint.status)}</dd></div><div><dt>Required Facility</dt><dd>{formatBlueprintRequiredFacility(selectedBlueprint)}</dd></div><div><dt>Output</dt><dd>{formatBlueprintOutput(selectedBlueprint)}</dd></div><div><dt>Build Ticks</dt><dd>{formatBlueprintValue(selectedBlueprint.buildTicks)}</dd></div><div><dt>Repeatable</dt><dd>{selectedBlueprint.repeatable ? "yes" : "no"}</dd></div>{selectedBlueprint.capabilities && <div><dt>Capabilities</dt><dd>{selectedBlueprint.capabilities.length ? selectedBlueprint.capabilities.join(", ") : "(none)"}</dd></div>}</dl><h4>Resources required</h4>{selectedBlueprint.inputs && Object.keys(selectedBlueprint.inputs).length ? <table className="dashboard-table"><thead><tr><th>Resource</th><th>Amount</th></tr></thead><tbody>{Object.entries(selectedBlueprint.inputs).map(([resource, amount]) => <tr key={resource}><td>{resource}</td><td>{formatBlueprintValue(amount)}</td></tr>)}</tbody></table> : <p className="dashboard-feedback">Resource requirements were not supplied by the catalog.</p>}{selectedBlueprint.runtimeAttributes && Object.keys(selectedBlueprint.runtimeAttributes).length > 0 && <><h4>Runtime attributes</h4><pre className="blueprint-runtime">{JSON.stringify(selectedBlueprint.runtimeAttributes, null, 2)}</pre></>}<button className="button button-primary" type="button" disabled={building || loadingDetails} onClick={() => void build()}>{building ? <>Checking readiness <LoadingDots /></> : "Build"}</button></> : <p className="dashboard-feedback error">{selectedBlueprintError ?? "Loading blueprint details..."}</p>}{message && <p className="dashboard-feedback" role="status">{message}</p>}</div>}</section>;
 }
 
 function RegularModeOverview({ snapshot, onStatusChange }: { snapshot: RegularModeSnapshot; onStatusChange: (moduleId: string, status: "online" | "offline" | "active") => void }) {
@@ -146,14 +209,54 @@ function RegularModeOverview({ snapshot, onStatusChange }: { snapshot: RegularMo
 
 function AlertSection({ alerts }: { alerts: RegularModeSnapshot["alerts"] }) { return <section className="overview-section alerts-section" aria-labelledby="alerts-heading"><SectionHeading id="alerts-heading" label="Alerts" detail={alerts.length ? `${alerts.length} open` : "All clear"} />{alerts.length ? <div className="alert-list">{alerts.map((alert) => <article className={`alert-row ${alert.severity}`} key={alert.id}><span className="status-word">{alert.severity}</span><div><h3>{alert.title}</h3><p>{alert.detail}</p>{alert.action && <small>{alert.action}</small>}</div></article>)}</div> : <div className="no-alerts"><span aria-hidden="true">✓</span><div><h3>No alerts</h3><p>Habitat reports no conditions requiring attention.</p></div></div>}</section>; }
 function ResourceCard({ resource }: { resource: ResourceSummary }) { return <article className={`resource-card ${resource.tone}`}><p className="dashboard-label">{resource.label}</p><strong>{resource.value}</strong><h3>{resource.interpretation}</h3><details><summary>Details</summary><p>{resource.detail}</p></details></article>; }
-function ModuleCard({ module, onStatusChange }: { module: ModuleSummary; onStatusChange?: (moduleId: string, status: "online" | "offline" | "active") => void }) { const controllable = onStatusChange && ["online", "offline", "active"].includes(module.status); return <article className="module-card"><div><p className="dashboard-label">{module.blueprintId}</p><h3>{module.label}</h3></div><span className={`status-chip ${module.status}`}>{module.status}</span>{controllable && <div className="module-status-controls" aria-label={`Change ${module.label} status`}>{["online", "offline", "active"].map((status) => <button key={status} className={`button status-control ${module.status === status ? "is-selected" : ""}`} type="button" onClick={() => onStatusChange?.(module.id, status as "online" | "offline" | "active")}>{status}</button>)}</div>}<details><summary>Details</summary><p>{module.detail}{module.status === "damaged" && " Status is read-only until repaired."}</p></details></article>; }
+function ModuleCard({ module, onStatusChange }: { module: ModuleSummary; onStatusChange?: (moduleId: string, status: "online" | "offline" | "active") => void }) {
+  const controllable = onStatusChange && ["online", "offline", "active"].includes(module.status);
+  const [status, setStatus] = useState<"online" | "offline" | "active">(module.status === "active" ? "active" : module.status === "offline" ? "offline" : "online");
+
+  useEffect(() => {
+    if (module.status === "active" || module.status === "offline" || module.status === "online") {
+      setStatus(module.status);
+    }
+  }, [module.status]);
+
+  return <article className="module-card"><div><p className="dashboard-label">{module.blueprintId}</p><h3>{module.label}</h3></div>{controllable ? <select className={`status-chip module-status-select ${status}`} aria-label={`Change ${module.label} status`} value={status} onChange={(event) => { const nextStatus = event.target.value as "online" | "offline" | "active"; setStatus(nextStatus); void onStatusChange?.(module.id, nextStatus); }}><option value="online">online</option><option value="offline">offline</option><option value="active">active</option></select> : <span className={`status-chip ${module.status}`}>{module.status}</span>}<details><summary>Details</summary><p>{module.detail}{module.status === "damaged" && " Status is read-only until repaired."}</p></details></article>;
+}
 function SectionHeading({ id, label, detail }: { id: string; label: string; detail: string }) { return <div className="section-heading"><h2 id={id}>{label}</h2><span className="telemetry-text">{detail}</span></div>; }
 function EmptyState({ text }: { text: string }) { return <p className="dashboard-feedback">{text}</p>; }
 function LoadingDots() { return <span className="dashboard-loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>; }
 function LoadingState({ label }: { label: string }) { return <p className="dashboard-feedback dashboard-loading" role="status">{label} <LoadingDots /></p>; }
+function formatBlueprintValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") return "(none)";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+function formatBlueprintOutput(blueprint: Blueprint): string {
+  if (!blueprint.output || typeof blueprint.output !== "object") return "(none)";
+  const output = blueprint.output as Record<string, unknown>;
+  const moduleType = typeof output.moduleType === "string" ? output.moduleType : undefined;
+  const itemType = typeof output.itemType === "string" ? output.itemType : undefined;
+  const quantity = typeof output.quantity === "number" && output.quantity > 1 ? ` x${output.quantity}` : "";
+  if (moduleType) return `module: ${moduleType}${quantity}`;
+  if (itemType) return `${itemType}${quantity}`;
+  return "(none)";
+}
+function formatBlueprintRequiredFacility(blueprint: Blueprint): string {
+  const requiredFacility = blueprint.requiredFacility;
+  if (typeof requiredFacility === "string" && requiredFacility.length > 0) return requiredFacility;
+  if (!requiredFacility || typeof requiredFacility !== "object" || Array.isArray(requiredFacility)) return "(none)";
+  const record = requiredFacility as Record<string, unknown>;
+  const candidates = [record.moduleType, record.blueprintId, record.facilityType, record.id];
+  return candidates.find((value): value is string => typeof value === "string" && value.length > 0) ?? "(none)";
+}
 function formatLocalTime(value: string): string { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date); }
 export function mountDashboard(element: Element) { createRoot(element).render(<StrictMode><Dashboard /></StrictMode>); }
 
+const previewCatalogResources: CatalogResource[] = [
+  { resourceId: "ferrite", displayName: "Ferrite", status: "common", amount: 0 },
+  { resourceId: "water", displayName: "Water", status: "operational", amount: 0 },
+  { resourceId: "oxygen", displayName: "Oxygen", status: "operational", amount: 0 },
+];
+const previewInventory: InventoryItem[] = [];
 const previewBlueprints: Blueprint[] = [
   { blueprintId: "small-solar-array", displayName: "Small Solar Array", description: "Compact surface power generation.", buildTicks: 900, inputs: { steel: 12, silicon: 8 } },
   { blueprintId: "life-support", displayName: "Life Support", description: "Closed-loop habitat support.", buildTicks: 1800, inputs: { steel: 24, electronics: 6 } },

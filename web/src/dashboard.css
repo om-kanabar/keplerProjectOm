@@ -66,7 +66,8 @@
 .telemetry-text { color: var(--dashboard-muted); white-space: nowrap; }
 .state-legend { display: flex; gap: .75rem; margin: -.4rem 0 1rem; }
 .status-chip { color: var(--dashboard-muted); }
-.status-chip.online, .status-chip.active { color: var(--dashboard-good); }
+.status-chip.online { color: #79d37e; }
+.status-chip.active { color: #d8a95e; }
 .status-chip.offline, .status-chip.damaged { color: var(--dashboard-danger); }
 .systems-list { display: grid; gap: .55rem; }
 .system-card { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1rem 0; border-bottom: 1px solid var(--dashboard-line); }
@@ -75,6 +76,11 @@
 .system-control { display: flex; gap: .85rem; align-items: center; }
 .module-action { min-width: 6.7rem; }
 .read-only-status { color: var(--dashboard-muted); font-size: .7rem; }
+.module-status-controls { grid-column: 1 / -1; display: flex; gap: .5rem; align-items: end; margin-top: .2rem; }
+.module-status-label { display: grid; gap: .28rem; min-width: 0; flex: 1 1 auto; color: var(--dashboard-muted); font: .53rem var(--dashboard-font-mono); letter-spacing: .07em; text-transform: uppercase; }
+.module-status-select { width: 100%; min-width: 0; border: 1px solid var(--dashboard-line); border-radius: 7px; padding: .6rem .7rem; background: #151515; color: var(--white); font: .72rem var(--dashboard-font-ui); }
+.module-status-select:focus-visible { border-color: var(--dashboard-accent); outline: 1px solid var(--dashboard-accent); }
+.module-status-apply { flex: none; align-self: end; }
 .info-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(15rem, .9fr); gap: 2.8rem; }
 .blueprint-list { border-top: 1px solid var(--dashboard-line); }
 .blueprint-list article { padding: 1rem 0; border-bottom: 1px solid var(--dashboard-line); }
@@ -83,9 +89,21 @@
 .blueprint-detail h3 { margin: .45rem 0 0; font-size: 1.05rem; font-weight: 500; }
 .blueprint-detail h4 { margin: 1.1rem 0 .5rem; font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 .blueprint-detail ul { margin: 0 0 1rem; padding-left: 1.1rem; color: var(--dashboard-muted); font: .68rem var(--dashboard-font-mono); line-height: 1.8; }
+.blueprint-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1rem; margin: .95rem 0 0; }
+.blueprint-fields div { min-width: 0; padding: .7rem .8rem; border: 1px solid var(--dashboard-line); border-radius: 8px; background: rgba(255, 255, 255, .02); }
+.blueprint-fields dt { color: var(--dashboard-muted); font: .55rem var(--dashboard-font-mono); letter-spacing: .07em; text-transform: uppercase; }
+.blueprint-fields dd { margin: .3rem 0 0; color: var(--white); font: .72rem var(--dashboard-font-ui); word-break: break-word; }
+.blueprint-runtime { margin: .75rem 0 1rem; padding: .9rem 1rem; border: 1px solid var(--dashboard-line); border-radius: 8px; background: rgba(255, 255, 255, .02); color: var(--dashboard-muted); font: .65rem/1.65 var(--dashboard-font-mono); white-space: pre-wrap; word-break: break-word; }
 .blueprint-list h3 { margin: 0; font-size: .9rem; font-weight: 500; }
 .blueprint-list p { margin: .4rem 0; color: var(--dashboard-muted); font-size: .75rem; line-height: 1.45; }
 .blueprint-list small { color: var(--dashboard-accent); }
+.table-frame { overflow-x: auto; border: 1px solid var(--dashboard-line); border-radius: 8px; background: var(--dashboard-panel); }
+.dashboard-table { width: 100%; border-collapse: collapse; min-width: 28rem; }
+.dashboard-table th, .dashboard-table td { padding: .8rem .9rem; border-bottom: 1px solid var(--dashboard-line); text-align: left; font-size: .75rem; }
+.dashboard-table th { color: var(--dashboard-muted); font: .56rem var(--dashboard-font-mono); letter-spacing: .07em; text-transform: uppercase; }
+.dashboard-table td:last-child, .dashboard-table th:last-child { text-align: right; }
+.dashboard-table tbody tr:last-child td { border-bottom: 0; }
+.dashboard-table tbody tr:hover { background: rgba(255, 255, 255, .02); }
 .scan-panel { padding-left: 1.5rem; border-left: 1px solid var(--dashboard-line); }
 .scan-panel form { display: grid; gap: .65rem; margin-top: 1.3rem; }
 .scan-panel label { display: grid; gap: .35rem; color: var(--dashboard-muted); font-size: .68rem; }
@@ -155,9 +173,15 @@ summary { color: var(--dashboard-muted); cursor: pointer; font: .58rem var(--das
 summary:focus-visible { outline: 1px solid var(--dashboard-accent); outline-offset: 3px; }
 details p { margin: .5rem 0 0; color: var(--dashboard-muted); font-size: .7rem; line-height: 1.4; }
 .module-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
-.module-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; align-items: start; }
+.module-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7.5rem, max-content); grid-template-rows: auto auto auto; gap: .55rem .65rem; align-items: start; }
 .module-card h3 { margin: .4rem 0 0; font-size: .84rem; font-weight: 500; }
-.module-card details { grid-column: 1 / -1; }
+.module-card > .status-chip, .module-status-select { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; }
+.module-status-select { appearance: none; -webkit-appearance: none; -moz-appearance: none; width: 100%; min-width: 7.5rem; border: 1px solid var(--dashboard-line); border-radius: 999px; padding: .42rem 1.4rem .42rem .6rem; background: #141414 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23d1bd8e' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right .55rem center; background-size: .6rem .36rem; color: var(--dashboard-accent); cursor: pointer; font: 600 .57rem var(--dashboard-font-mono); letter-spacing: .065em; text-transform: uppercase; }
+.module-status-select:focus-visible { outline: 1px solid var(--dashboard-accent); outline-offset: 2px; }
+.module-status-select.online { color: #79d37e; }
+.module-status-select.active { color: #d8a95e; }
+.module-status-select.offline, .module-status-select.damaged { color: var(--dashboard-danger); }
+.module-card details { grid-column: 1 / -1; grid-row: 3; }
 .inventory-list { border-top: 1px solid var(--dashboard-line); }
 .work-row, .activity-row { display: flex; justify-content: space-between; gap: 1rem; padding: .95rem 0; border-bottom: 1px solid var(--dashboard-line); }
 .work-row > strong { align-self: center; color: var(--dashboard-accent); font: 400 1.1rem var(--dashboard-font-mono); }

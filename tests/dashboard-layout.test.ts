@@ -50,6 +50,17 @@ describe("Habitat operator console layout", () => {
     expect(dashboard).toContain('label="Scan"');
   });
 
+  test("loads blueprint details and catalog resources from the live endpoints", () => {
+    const dashboard = readProjectFile("web/src/main.tsx");
+
+    expect(dashboard).toContain('request<{ blueprint: Blueprint }>(`/catalog/blueprints/${blueprintId}`)');
+    expect(dashboard).toContain('request<{ resources: CatalogResource[] }>("/resources")');
+    expect(dashboard).toContain('request<{ inventory: InventoryItem[] }>("/inventory")');
+    expect(dashboard).toContain("amount > 0");
+    expect(dashboard).toContain("Resources required");
+    expect(dashboard).toContain("Build");
+  });
+
   test("uses server-owned blueprint and scan routes without browser tick controls", () => {
     const dashboard = readProjectFile("web/src/main.tsx");
 
@@ -64,6 +75,9 @@ describe("Habitat operator console layout", () => {
 
     expect(dashboard).toContain('pickOperatingLine');
     expect(dashboard).toContain('inhabitants');
+    expect(dashboard).toContain('module-status-select');
+    expect(dashboard).toContain('className={`status-chip module-status-select ${status}`}');
+    expect(dashboard).toContain('void onStatusChange?.(module.id, nextStatus)');
   });
 
   test("uses Inter for interface reading and Space Mono only for telemetry", () => {
