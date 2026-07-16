@@ -48,6 +48,7 @@ describe("regular mode dashboard model", () => {
     expect(snapshot.connection).toBe("disconnected");
     expect(snapshot.alerts).toEqual([]);
     expect(snapshot.activeWork).toEqual([]);
+    expect(snapshot.clock).toMatchObject({ mode: "manual", listening: false });
   });
 
   test("returns bounded operating-system lines without chat copy", () => {
