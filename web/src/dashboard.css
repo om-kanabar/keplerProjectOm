@@ -106,6 +106,12 @@
 .command-form { display: grid; gap: .75rem; max-width: 34rem; margin: 1rem 0; padding: 1rem; border: 1px solid var(--dashboard-line); border-radius: 10px; background: rgba(255, 255, 255, .02); }
 .command-form label { display: grid; gap: .35rem; color: var(--dashboard-muted); font: .62rem var(--dashboard-font-mono); letter-spacing: .05em; text-transform: uppercase; }
 .command-form input { width: 100%; padding: .65rem .7rem; border: 1px solid var(--dashboard-line); border-radius: 6px; background: rgba(0, 0, 0, .2); color: var(--white); font: .72rem var(--dashboard-font-ui); }
+.scan-result-cards { display: grid; gap: .55rem; margin-top: .8rem; }
+.scan-result-card { padding: .7rem .8rem; border: 1px solid rgba(209,189,142,.28); border-left: 3px solid var(--dashboard-accent); border-radius: 7px; background: rgba(209,189,142,.05); color: var(--dashboard-muted); font-size: .68rem; }
+.scan-result-card > div { display: flex; justify-content: space-between; gap: .6rem; color: var(--white); font-family: var(--dashboard-font-mono); }
+.scan-result-card > div span { color: var(--dashboard-muted); }
+.scan-result-card p { margin: .35rem 0 0; }
+.scan-result-card b { color: var(--dashboard-accent); font-weight: 500; }
 .eva-guide { margin-bottom: 1rem; padding: 1.1rem 1.2rem; border: 1px solid var(--dashboard-line); border-left: 3px solid var(--dashboard-accent); border-radius: 9px; background: var(--dashboard-panel); }
 .eva-guide h2 { margin: .45rem 0 0; font-size: 1.35rem; font-weight: 500; }
 .eva-guide p:last-child { max-width: 48rem; margin: .55rem 0 0; color: var(--dashboard-muted); font-size: .8rem; line-height: 1.5; }
