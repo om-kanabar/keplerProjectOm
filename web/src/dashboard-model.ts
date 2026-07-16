@@ -55,7 +55,6 @@ export type RegularModeSnapshot = {
   modules: ModuleSummary[];
   activeWork: ActiveWorkItem[];
   activity: ActivityEvent[];
-  clock: { mode: "manual" | "kepler"; listening: boolean; connectionStatus: string; latestKeplerTick: number | null; latestAdvancedBy: number | null; lastError: string | null };
 };
 
 const operatingLines = [
@@ -94,7 +93,6 @@ export function normalizeStatusSnapshot(input: any): RegularModeSnapshot {
     modules,
     activeWork,
     activity: Array.isArray(input?.activity) ? input.activity : [],
-    clock: { mode: input?.clock?.mode === "kepler" ? "kepler" : "manual", listening: input?.clock?.listening === true, connectionStatus: String(input?.clock?.connectionStatus ?? "disconnected"), latestKeplerTick: typeof input?.clock?.latestKeplerTick === "number" ? input.clock.latestKeplerTick : null, latestAdvancedBy: typeof input?.clock?.latestAdvancedBy === "number" ? input.clock.latestAdvancedBy : null, lastError: typeof input?.clock?.lastError === "string" ? input.clock.lastError : null },
   };
 }
 

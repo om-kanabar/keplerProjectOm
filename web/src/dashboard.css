@@ -172,10 +172,6 @@
 .dashboard-loading-dots span:nth-child(2) { animation-delay: .18s; }
 .dashboard-loading-dots span:nth-child(3) { animation-delay: .36s; }
 .dashboard-loading { display: flex; align-items: center; gap: .25rem; }
-.clock-panel { margin: 1rem 0; padding: .85rem 1rem; border: 1px solid var(--dashboard-line); border-radius: 8px; background: var(--dashboard-panel); }
-.clock-metrics { display: flex; flex-wrap: wrap; gap: 1rem; color: var(--dashboard-muted); font: .62rem var(--dashboard-font-mono); text-transform: uppercase; }
-.clock-metrics strong { color: var(--white); }
-.clock-actions { display: flex; gap: .5rem; margin-top: .75rem; }
 @keyframes dashboard-dot-pulse { 0%, 70%, 100% { opacity: .25; } 35% { opacity: 1; } }
 .state-page { display: grid; width: min(100%, 52rem); min-height: 32rem; margin: 0 auto; align-content: center; }
 .registration-intro { max-width: 36rem; margin-bottom: 2rem; }
