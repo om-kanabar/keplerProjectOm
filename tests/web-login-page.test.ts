@@ -23,7 +23,7 @@ describe("web login page", () => {
     expect(app).toContain("UNABLE TO REACH HABITAT SERVER");
     expect(app).toContain("Unable to load Habitat dashboard.");
     expect(app).toContain("dashboardBundleVersion");
-    expect(app).toContain("dashboardBundleVersion = '20260715.11'");
+    expect(app).toContain("dashboardBundleVersion = '20260715.13'");
     expect(app).toContain("habitat:auth-required");
     expect(app).toContain("habitat:ready");
     expect(app).toContain("is-verifying");

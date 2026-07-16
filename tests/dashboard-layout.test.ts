@@ -61,6 +61,15 @@ describe("Habitat operator console layout", () => {
     expect(dashboard).toContain("Build");
   });
 
+  test("renders blueprint details as a fullscreen overlay with a back button", () => {
+    const dashboard = readProjectFile("web/src/main.tsx");
+
+    expect(dashboard).toContain("blueprint-overlay");
+    expect(dashboard).toContain("blueprint-overlay-panel");
+    expect(dashboard).toContain("blueprint-list-pane");
+    expect(dashboard).toContain("blueprint-overlay-back");
+  });
+
   test("uses server-owned blueprint and scan routes without browser tick controls", () => {
     const dashboard = readProjectFile("web/src/main.tsx");
 
