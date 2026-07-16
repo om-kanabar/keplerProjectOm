@@ -13,6 +13,8 @@ const modes: Array<{ id: DashboardMode; label: string; detail: string }> = [
 ];
 const subsystems = ["Overview", "Modules", "Blueprints", "Resources", "Inventory", "Construction", "Alerts", "Forecast", "Humans", "Scan"];
 type Subsystem = typeof subsystems[number];
+type Blueprint = { blueprintId: string; displayName: string; description?: string; buildTicks?: number };
+type InventoryItem = { resourceId: string; amount: number };
 
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(path, { credentials: "same-origin", headers: { "Content-Type": "application/json" } });
@@ -45,6 +47,8 @@ function Dashboard() {
   const [name, setName] = useState("");
   const [activeMode, setActiveMode] = useState<DashboardMode>("regular");
   const [activeSubsystem, setActiveSubsystem] = useState<Subsystem>("Overview");
+  const [blueprints, setBlueprints] = useState<Blueprint[] | null>(null);
+  const [inventory, setInventory] = useState<InventoryItem[] | null>(null);
   const unregisterDialog = useRef<HTMLDialogElement>(null);
 
   const refresh = async () => {
@@ -54,6 +58,10 @@ function Dashboard() {
     finally { setLoading(false); }
   };
   useEffect(() => { if (!previewMode) void refresh(); }, [previewMode]);
+  useEffect(() => {
+    if (activeSubsystem === "Blueprints" && !blueprints) void request<{ blueprints: Blueprint[] }>("/catalog/blueprints").then((result) => setBlueprints(result.blueprints)).catch(() => setBlueprints([]));
+    if (activeSubsystem === "Inventory" && !inventory) void request<{ inventory: InventoryItem[] }>("/inventory").then((result) => setInventory(result.inventory)).catch(() => setInventory([]));
+  }, [activeSubsystem, blueprints, inventory]);
 
   const register = async () => {
     if (!name.trim()) return;
@@ -70,7 +78,7 @@ function Dashboard() {
     catch (caught) { setMessage(caught instanceof Error ? caught.message : "Logout failed."); }
   };
 
-  if (loading && !snapshot) return <main className="habitat-dashboard state-page"><div className="empty-state"><p className="dashboard-label">Habitat</p><h2>Reading habitat state.</h2></div></main>;
+  if (loading && !snapshot) return <main className="habitat-dashboard state-page"><div className="empty-state"><p className="dashboard-label">Habitat</p><h2>Reading habitat state <LoadingDots /></h2></div></main>;
   if (error && !snapshot) return <main className="habitat-dashboard state-page"><div className="error-state"><p className="dashboard-label">Connection error</p><h2>Habitat is not reachable.</h2><p>{error}</p><button className="button button-primary" onClick={() => void refresh()}>Retry</button></div></main>;
   if (!snapshot?.registration) return <RegistrationState name={name} message={message} setName={setName} register={() => void register()} />;
 
@@ -82,7 +90,7 @@ function Dashboard() {
       <div className="sidebar-footer"><span className={`connection-dot ${snapshot.connection}`} aria-hidden="true" /> <span>{snapshot.connection === "connected" ? snapshot.registration.status ?? "connected" : "disconnected"}</span></div>
     </aside>
     <section className="console-content"><header className="console-header"><div><p className="dashboard-label">{snapshot.registration.displayName} / habitat</p><h1 id="dashboard-title">{modes.find((mode) => mode.id === activeMode)?.label}</h1></div><div className="dashboard-actions"><button className="button" disabled={loading} onClick={() => void refresh()}>Refresh</button><button className="button" onClick={() => void logout()}>Log out</button><button className="button button-danger" onClick={() => unregisterDialog.current?.showModal()}>Unregister</button></div></header>
-      <section id={`${activeMode}-panel`} role="tabpanel" aria-label={`${activeMode} mode`} className="console-panel">{activeMode !== "regular" ? <ModePlaceholder mode={activeMode} /> : activeSubsystem === "Overview" ? <RegularModeOverview snapshot={snapshot} /> : <SubsystemView name={activeSubsystem} snapshot={snapshot} />}</section>
+      <section id={`${activeMode}-panel`} role="tabpanel" aria-label={`${activeMode} mode`} className="console-panel">{activeMode !== "regular" ? <ModePlaceholder mode={activeMode} /> : activeSubsystem === "Overview" ? <RegularModeOverview snapshot={snapshot} /> : <SubsystemView name={activeSubsystem} snapshot={snapshot} blueprints={blueprints} inventory={inventory} />}</section>
       {message && <p className="dashboard-feedback success" role="status">{message}</p>}
     </section>
     <dialog className="dashboard-dialog" ref={unregisterDialog}><p className="dashboard-label">Registration</p><h2>Unregister {snapshot.registration.displayName}?</h2><p>This removes the current registration through the Habitat API.</p><div className="dialog-actions"><button className="button" onClick={() => unregisterDialog.current?.close()}>Cancel</button><button className="button button-danger" onClick={() => { unregisterDialog.current?.close(); void unregister(); }}>Unregister</button></div></dialog>
@@ -92,7 +100,7 @@ function Dashboard() {
 function RegistrationState({ name, message, setName, register }: { name: string; message: string | null; setName: (name: string) => void; register: () => void }) { return <main className="habitat-dashboard state-page"><section className="registration-intro"><p className="dashboard-label">Habitat</p><h1 id="dashboard-title">Not registered.</h1><p>Connect this display to a Habitat to see its live state.</p></section><section className="empty-state"><h2>Choose a Habitat name.</h2><form className="registration-form" onSubmit={(event) => { event.preventDefault(); register(); }}><label htmlFor="habitat-name">Habitat name</label><input id="habitat-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Habitat name" required /><button className="button button-primary">Register</button></form>{message && <p className="dashboard-feedback" role="status">{message}</p>}</section></main>; }
 
 function ModePlaceholder({ mode }: { mode: DashboardMode }) { const label = mode === "display" ? "Display Mode" : "Info Mode"; return <section className="mode-placeholder"><p className="dashboard-label">{label}</p><h2>This mode is connected.</h2><p>{label} is reserved for its own focused experience. Regular Mode remains the operating view for now.</p></section>; }
-function SubsystemView({ name, snapshot }: { name: Subsystem; snapshot: RegularModeSnapshot }) {
+function SubsystemView({ name, snapshot, blueprints, inventory }: { name: Subsystem; snapshot: RegularModeSnapshot; blueprints: Blueprint[] | null; inventory: InventoryItem[] | null }) {
   if (name === "Modules") return <section className="subsystem-view"><SectionHeading id="modules-view-heading" label="Modules" detail={`${snapshot.modules.length} installed`} /><div className="module-grid">{snapshot.modules.length ? snapshot.modules.map((module) => <ModuleCard key={module.id} module={module} />) : <EmptyState text="No modules are reported by Habitat yet." />}</div></section>;
   if (name === "Alerts") return <section className="subsystem-view"><AlertSection alerts={snapshot.alerts} /></section>;
   if (name === "Resources") return <section className="subsystem-view"><SectionHeading id="resources-view-heading" label="Resources" detail="Current habitat reserves" /><div className="resource-grid">{snapshot.resources.map((resource) => <ResourceCard key={resource.id} resource={resource} />)}</div></section>;
@@ -100,8 +108,9 @@ function SubsystemView({ name, snapshot }: { name: Subsystem; snapshot: RegularM
   if (name === "Forecast") return <section className="subsystem-view"><SectionHeading id="forecast-view-heading" label="Forecast" detail="Surface conditions" /><div className="mode-placeholder"><p className="dashboard-label">Next conditions</p><h2>Solar outlook: clear.</h2><p>Current irradiance supports normal power generation. Detailed hourly forecasts will appear here when the weather feed is connected.</p></div></section>;
   if (name === "Humans") return <section className="subsystem-view"><SectionHeading id="humans-view-heading" label="Humans" detail="Crew overview" /><div className="mode-placeholder"><p className="dashboard-label">Crew manifest</p><h2>Habitat crew systems ready.</h2><p>Human locations, assignments, and EVA state will appear here from the crew service.</p></div></section>;
   if (name === "Scan") return <section className="subsystem-view"><SectionHeading id="scan-view-heading" label="Scan" detail="Explorer interface" /><div className="mode-placeholder"><p className="dashboard-label">Surface scan</p><h2>Explorer scan ready.</h2><p>Deploy a human and provide sensor strength and radius to scan nearby terrain through the Habitat CLI workflow.</p></div></section>;
-  const detail = name === "Blueprints" ? "Blueprint catalog will appear here when the catalog view is connected." : "Inventory records will appear here when the inventory view is connected.";
-  return <section className="subsystem-view mode-placeholder"><p className="dashboard-label">{name}</p><h2>System view ready.</h2><p>{detail}</p></section>;
+  if (name === "Blueprints") return <section className="subsystem-view"><SectionHeading id="blueprints-view-heading" label="Blueprints" detail={blueprints ? `${blueprints.length} available` : "Loading catalog"} />{blueprints === null ? <LoadingState label="Loading blueprint catalog" /> : <div className="blueprint-list">{blueprints.length ? blueprints.map((blueprint) => <article key={blueprint.blueprintId}><h3>{blueprint.displayName}</h3><p>{blueprint.description ?? blueprint.blueprintId}</p>{blueprint.buildTicks !== undefined && <small>{blueprint.buildTicks} build ticks</small>}</article>) : <EmptyState text="Blueprint catalog is unavailable." />}</div>}</section>;
+  if (name === "Inventory") return <section className="subsystem-view"><SectionHeading id="inventory-view-heading" label="Inventory" detail={inventory ? `${inventory.length} resource types` : "Loading inventory"} />{inventory === null ? <LoadingState label="Loading inventory" /> : inventory.length ? <div className="inventory-list">{inventory.map((item) => <article className="work-row" key={item.resourceId}><h3>{item.resourceId}</h3><strong>{item.amount}</strong></article>)}</div> : <EmptyState text="Inventory is currently empty." />}</section>;
+  return <section className="subsystem-view mode-placeholder"><p className="dashboard-label">{name}</p><h2>System view ready.</h2><p>This subsystem is connected to the Habitat navigation.</p></section>;
 }
 
 function RegularModeOverview({ snapshot }: { snapshot: RegularModeSnapshot }) {
@@ -115,4 +124,6 @@ function ResourceCard({ resource }: { resource: ResourceSummary }) { return <art
 function ModuleCard({ module }: { module: ModuleSummary }) { return <article className="module-card"><div><p className="dashboard-label">{module.blueprintId}</p><h3>{module.label}</h3></div><span className={`status-chip ${module.status}`}>{module.status}</span><details><summary>Details</summary><p>{module.detail}</p></details></article>; }
 function SectionHeading({ id, label, detail }: { id: string; label: string; detail: string }) { return <div className="section-heading"><h2 id={id}>{label}</h2><span className="telemetry-text">{detail}</span></div>; }
 function EmptyState({ text }: { text: string }) { return <p className="dashboard-feedback">{text}</p>; }
+function LoadingDots() { return <span className="dashboard-loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>; }
+function LoadingState({ label }: { label: string }) { return <p className="dashboard-feedback dashboard-loading" role="status">{label} <LoadingDots /></p>; }
 export function mountDashboard(element: Element) { createRoot(element).render(<StrictMode><Dashboard /></StrictMode>); }
