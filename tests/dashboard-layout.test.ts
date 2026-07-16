@@ -62,6 +62,8 @@ describe("Habitat operator console layout", () => {
     expect(dashboard).toContain("Guided explorer controls");
     expect(dashboard).toContain("length: 2500");
     expect(dashboard).toContain("50 by 50 EVA movement map");
+    expect(dashboard).toContain("EVAKeyboardControls");
+    expect(dashboard).toContain('"w", "a", "s", "d"');
   });
 
   test("loads blueprint details and catalog resources from the live endpoints", () => {
