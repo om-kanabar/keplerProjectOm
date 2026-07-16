@@ -10,7 +10,7 @@ const timeCommit = document.querySelector('#time-commit');
 const minimumAuthLoadingTime = 1500;
 const authCodeLength = 24;
 const localAdminCookieName = 'habitat_local_admin';
-const dashboardBundleVersion = '20260715.27';
+const dashboardBundleVersion = '20260715.28';
 let dashboardMounted = false;
 
 function isAuthSkipPreview() {
