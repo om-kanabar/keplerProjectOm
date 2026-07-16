@@ -10,6 +10,7 @@ import {
   TickSimulationResult,
 } from "./types";
 import type { ServerLogEntry } from "./server/logs";
+import type { HabitatClockState } from "./types";
 import { readData } from "./storage";
 
 type ApiErrorPayload = {
@@ -25,6 +26,7 @@ type RegistrationResponse = {
 type StatusResponse = {
   registration: KeplerRegistration | null;
   modules: HabitatModuleTelemetry[];
+  clock: HabitatClockState;
 };
 
 type WebLoginCodeResponse = {
@@ -51,6 +53,9 @@ export type HabitatApiClient = {
   listWebSessions: (token: string) => Promise<{ sessions: WebSessionMetadata[] }>;
   getRegistration: () => Promise<RegistrationResponse>;
   getStatus: () => Promise<StatusResponse>;
+  getClockStatus: () => Promise<{ clock: HabitatClockState }>;
+  setClockListening: (enabled: boolean) => Promise<{ clock: HabitatClockState }>;
+  watchClock: (onEvent: (event: Record<string, unknown>) => void, signal?: AbortSignal) => Promise<void>;
   register: (displayName: string) => Promise<{ registration: KeplerRegistration }>;
   unregister: () => Promise<{ registration: KeplerRegistration }>;
   getHealth: () => Promise<{ health: Record<string, unknown> }>;
@@ -169,6 +174,9 @@ export function createHabitatApiClient(baseUrl = process.env.HABITAT_API_BASE_UR
     },
     getRegistration: () => request<RegistrationResponse>("GET", "/registration"),
     getStatus: () => request<StatusResponse>("GET", "/status"),
+    getClockStatus: () => request<{ clock: HabitatClockState }>("GET", "/clock/status"),
+    setClockListening: (enabled) => request<{ clock: HabitatClockState }>("POST", "/clock/listen", { enabled }),
+    watchClock: async (onEvent, signal) => { const response = await fetch(`${normalizedBaseUrl}/clock/events`, { signal }); if (!response.ok || !response.body) throw new Error("Unable to open the local Habitat clock stream."); const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; while (true) { const next = await reader.read(); if (next.done) break; buffer += decoder.decode(next.value, { stream: true }); const chunks = buffer.split("\n\n"); buffer = chunks.pop() ?? ""; for (const chunk of chunks) { const line = chunk.split("\n").find((item) => item.startsWith("data: ")); if (line) onEvent(JSON.parse(line.slice(6))); } } },
     register: (displayName: string) => request<{ registration: KeplerRegistration }>("POST", "/registration", { displayName }),
     unregister: () => request<{ registration: KeplerRegistration }>("DELETE", "/registration"),
     getHealth: () => request<{ health: Record<string, unknown> }>("GET", "/health"),

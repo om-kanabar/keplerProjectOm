@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cancelConstruction, inspectConstructionReadiness, listConstructionJobs, startConstruction } from "../../construction";
 import { runBatteryRechargeSimulation, runTickSimulation } from "../../tick";
+import { getClockState } from "../kepler-stream";
 import { syncRegisteredHabitatState } from "../services/registration-service";
 
 export function registerConstructionRoutes(app: Hono): void {
@@ -45,6 +46,7 @@ export function registerConstructionRoutes(app: Hono): void {
 
   app.post("/ticks", async (c) => {
     await syncRegisteredHabitatState();
+    if (getClockState().listening) throw new Error("Manual ticks are disabled while listening to Kepler. Run `habitat clock listen off` to return to manual mode.");
     const body = await c.req.json<{ ticks: number }>();
 
     return Response.json({

@@ -118,6 +118,28 @@ export type KeplerRegistration = {
   status?: string;
   lastSeenAt?: string | null;
   blueprints?: BlueprintReference[];
+  streamUrl?: string;
+  apiToken?: string;
+  stream?: KeplerStreamMetadata;
+};
+
+export type KeplerStreamMetadata = {
+  protocolVersion?: string;
+  subscriptions?: string[];
+  currentTick?: number;
+  ticksPerPulse?: number;
+  status?: string;
+} & Record<string, unknown>;
+
+export type HabitatClockState = {
+  mode: "manual" | "kepler";
+  listening: boolean;
+  connectionStatus: "disconnected" | "connecting" | "connected" | "error";
+  latestKeplerTick: number | null;
+  latestAdvancedBy: number | null;
+  lastConnectedAt: string | null;
+  lastMessageAt: string | null;
+  lastError: string | null;
 };
 
 export type HabitatData = Record<string, unknown> & {
@@ -129,4 +151,5 @@ export type HabitatData = Record<string, unknown> & {
   exploration?: ExplorationState;
   alerts?: HabitatAlert[];
   alertContract?: AlertContract;
+  clockState?: HabitatClockState;
 };

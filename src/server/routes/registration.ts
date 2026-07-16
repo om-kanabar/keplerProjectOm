@@ -3,6 +3,7 @@ import { listModules } from "../../modules";
 import { getCurrentPowerSummary, getModulePowerDrawKw } from "../../tick";
 import { HabitatPowerSummary } from "../../types";
 import { createRegistration, deleteRegistration, getRegistration, syncRegisteredHabitatState } from "../services/registration-service";
+import { getClockState } from "../kepler-stream";
 
 export function registerRegistrationRoutes(app: Hono): void {
   app.get("/registration", async (c) => {
@@ -23,6 +24,7 @@ export function registerRegistrationRoutes(app: Hono): void {
         powerDrawKw: getModulePowerDrawKw(module),
       })),
       power: registration ? await getCurrentPowerSummary() : emptyPowerSummary(),
+      ...(registration ? { clock: getClockState() } : {}),
     });
   });
 

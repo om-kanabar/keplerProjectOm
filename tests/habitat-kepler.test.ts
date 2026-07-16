@@ -255,6 +255,9 @@ async function startTestServer(options: TestServerOptions = {}): Promise<TestSer
         return Response.json(
           {
             habitatId: "habitat-server-123",
+            streamUrl: "wss://planet.turingguild.com/planet/stream",
+            apiToken: "habitat-stream-secret",
+            stream: { protocolVersion: "1.0", subscriptions: ["ticks"], currentTick: 800, ticksPerPulse: 1, status: "running" },
             starterModules: [
               {
                 id: "starter-command-module",
@@ -1011,7 +1014,11 @@ describe("Kepler habitat registration commands", () => {
       expect(readData().keplerRegistration).toMatchObject({
         habitatId: "habitat-server-123",
         displayName: "Artemis Ridge",
+        streamUrl: "wss://planet.turingguild.com/planet/stream",
+        apiToken: "habitat-stream-secret",
+        stream: { currentTick: 800, subscriptions: ["ticks"] },
       });
+      expect(readData().clockState).toMatchObject({ mode: "manual", listening: false, connectionStatus: "disconnected" });
       expect(readData().modules).toEqual([
         {
           id: "starter-command-module",

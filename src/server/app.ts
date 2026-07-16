@@ -12,6 +12,7 @@ import { registerHumanRoutes } from "./routes/humans";
 import { registerEvaRoutes } from "./routes/eva";
 import { registerAlertRoutes } from "./routes/alerts";
 import { registerCollectionRoutes } from "./routes/collection";
+import { registerClockRoutes } from "./routes/clock";
 import { fetchKeplerHealth, fetchKeplerModuleCatalog, fetchKeplerSiteTypeCatalog, fetchKeplerUnlockCatalog, fetchKeplerVersion, reportHabitatUnlocks, sendHabitatHeartbeat, sendHabitatSummary } from "../kepler";
 
 export function createApp(): Hono {
@@ -46,6 +47,7 @@ export function createApp(): Hono {
   registerConstructionRoutes(app);
   registerScanRoutes(app);
   registerHumanRoutes(app); registerEvaRoutes(app); registerAlertRoutes(app); registerCollectionRoutes(app);
+  registerClockRoutes(app);
 
   app.get("/health", async () => Response.json({ health: await fetchKeplerHealth() }));
   app.get("/version", async () => Response.json({ version: await fetchKeplerVersion() }));

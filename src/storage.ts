@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { AlertContract, ExplorationState, HabitatAlert, HabitatData, HabitatHuman, HabitatModule, InventoryRecord, KeplerRegistration } from "./types";
+import { AlertContract, ExplorationState, HabitatAlert, HabitatClockState, HabitatData, HabitatHuman, HabitatModule, InventoryRecord, KeplerRegistration, KeplerStreamMetadata } from "./types";
 
 const DATA_FILE_NAME = "habitat.sqlite";
 const STATE_TABLE_NAME = "habitat_state";
@@ -105,7 +105,7 @@ function parseStoredData(value: string): HabitatData {
     inventory: parseInventory(parsed.inventory),
     modules: parseModules(parsed.modules),
     habitatApiBaseUrl: typeof parsed.habitatApiBaseUrl === "string" ? parsed.habitatApiBaseUrl : undefined,
-    humans: parseHumans(parsed.humans), exploration: parseExploration(parsed.exploration), alerts: parseAlerts(parsed.alerts), alertContract: parseAlertContract(parsed.alertContract),
+    humans: parseHumans(parsed.humans), exploration: parseExploration(parsed.exploration), alerts: parseAlerts(parsed.alerts), alertContract: parseAlertContract(parsed.alertContract), clockState: parseClockState(parsed.clockState),
   };
 }
 
@@ -113,6 +113,7 @@ function parseHumans(value: unknown): HabitatHuman[] | undefined { return Array.
 function parseExploration(value: unknown): ExplorationState | undefined { if (!value || typeof value !== "object") return undefined; const v = value as Partial<ExplorationState>; return (v.humanId === null || typeof v.humanId === "string") && typeof v.x === "number" && Number.isInteger(v.x) && typeof v.y === "number" && Number.isInteger(v.y) && !!v.carried && typeof v.carried === "object" && typeof v.capacityKg === "number" ? { humanId: v.humanId, x: v.x, y: v.y, carried: parseInventory(v.carried) ?? {}, capacityKg: v.capacityKg, battery: typeof v.battery === "number" ? Math.max(0, v.battery) : 100, batteryCapacity: typeof v.batteryCapacity === "number" ? v.batteryCapacity : 100, batteryPerTick: typeof v.batteryPerTick === "number" ? v.batteryPerTick : 2, oxygen: typeof v.oxygen === "number" ? Math.max(0, v.oxygen) : 100, oxygenCapacity: typeof v.oxygenCapacity === "number" ? v.oxygenCapacity : 100, oxygenPerTick: typeof v.oxygenPerTick === "number" ? v.oxygenPerTick : 3 } : undefined; }
 function parseAlerts(value: unknown): HabitatAlert[] | undefined { return Array.isArray(value) ? value.filter((v): v is HabitatAlert => !!v && typeof v === "object" && typeof (v as HabitatAlert).id === "string" && typeof (v as HabitatAlert).key === "string" && typeof (v as HabitatAlert).status === "string") : undefined; }
 function parseAlertContract(value: unknown): AlertContract | undefined { return !!value && typeof value === "object" && typeof (value as AlertContract).schemaVersion === "string" && !!(value as AlertContract).schema && typeof (value as AlertContract).schema === "object" ? value as AlertContract : undefined; }
+function parseClockState(value: unknown): HabitatClockState | undefined { if (!value || typeof value !== "object") return undefined; const v = value as Partial<HabitatClockState>; const mode = v.mode === "kepler" || v.mode === "manual" ? v.mode : undefined; const connectionStatus = ["disconnected", "connecting", "connected", "error"].includes(String(v.connectionStatus)) ? v.connectionStatus as HabitatClockState["connectionStatus"] : undefined; return mode && typeof v.listening === "boolean" && connectionStatus ? { mode, listening: v.listening, connectionStatus, latestKeplerTick: typeof v.latestKeplerTick === "number" ? v.latestKeplerTick : null, latestAdvancedBy: typeof v.latestAdvancedBy === "number" ? v.latestAdvancedBy : null, lastConnectedAt: typeof v.lastConnectedAt === "string" ? v.lastConnectedAt : null, lastMessageAt: typeof v.lastMessageAt === "string" ? v.lastMessageAt : null, lastError: typeof v.lastError === "string" ? v.lastError : null } : undefined; }
 
 function parseKeplerRegistration(
   value: unknown,
@@ -139,8 +140,13 @@ function parseKeplerRegistration(
     catalogVersion: typeof registration.catalogVersion === "string" ? registration.catalogVersion : undefined,
     status: typeof registration.status === "string" ? registration.status : undefined,
     lastSeenAt: typeof registration.lastSeenAt === "string" || registration.lastSeenAt === null ? registration.lastSeenAt : undefined,
+    streamUrl: typeof registration.streamUrl === "string" ? registration.streamUrl : undefined,
+    apiToken: typeof registration.apiToken === "string" ? registration.apiToken : undefined,
+    stream: parseStreamMetadata(registration.stream),
   };
 }
+
+function parseStreamMetadata(value: unknown): KeplerStreamMetadata | undefined { if (!value || typeof value !== "object" || Array.isArray(value)) return undefined; const stream = value as Record<string, unknown>; return { ...stream, protocolVersion: typeof stream.protocolVersion === "string" ? stream.protocolVersion : undefined, subscriptions: Array.isArray(stream.subscriptions) ? stream.subscriptions.filter((item): item is string => typeof item === "string") : undefined, currentTick: typeof stream.currentTick === "number" ? stream.currentTick : undefined, ticksPerPulse: typeof stream.ticksPerPulse === "number" ? stream.ticksPerPulse : undefined, status: typeof stream.status === "string" ? stream.status : undefined }; }
 
 function parseModules(value: unknown): HabitatModule[] | undefined {
   if (!Array.isArray(value)) {

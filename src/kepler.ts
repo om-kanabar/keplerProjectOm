@@ -6,6 +6,9 @@ import { AlertContract, BlueprintReference, HabitatHuman, KeplerRegistration, Re
 
 type HabitatRegistrationResponse = {
   habitatId: string;
+  streamUrl?: string;
+  apiToken?: string;
+  stream?: KeplerRegistration["stream"];
   starterModules: StarterModulePayload[];
   blueprints: BlueprintReference[];
   starterHumans: HabitatHuman[];
@@ -152,6 +155,9 @@ export async function registerWithKepler(displayName: string): Promise<KeplerReg
     habitatId: response.habitatId,
     displayName,
     blueprints: response.blueprints,
+    streamUrl: response.streamUrl,
+    apiToken: response.apiToken,
+    stream: response.stream,
   };
 
   writeData({
@@ -160,6 +166,7 @@ export async function registerWithKepler(displayName: string): Promise<KeplerReg
     modules: hydrateStarterModules(response.starterModules),
     humans: hydrateStarterHumans(response.starterHumans ?? []),
     alertContract: response.contracts?.alerts,
+    clockState: { mode: "manual", listening: false, connectionStatus: "disconnected", latestKeplerTick: null, latestAdvancedBy: null, lastConnectedAt: null, lastMessageAt: null, lastError: null },
   });
 
   return registration;

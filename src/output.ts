@@ -54,6 +54,10 @@ export function printKeplerRegistration(
   console.log(`  Habitat ID: ${registration.habitatId}`);
   console.log(`  UUID: ${registration.habitatUuid}`);
   console.log(`  Name: ${registration.displayName}`);
+  console.log(`  Stream URL: ${registration.streamUrl ?? "(not provided)"}`);
+  console.log(`  Stream API Token: ${registration.apiToken ?? "(not provided)"}`);
+  console.log(`  Stream Subscriptions: ${registration.stream?.subscriptions?.join(", ") ?? "(none)"}`);
+  if (registration.stream?.currentTick !== undefined) console.log(`  Registration Tick: ${registration.stream.currentTick}`);
 
   if (registration.habitatSlug) {
     console.log(`  Slug: ${registration.habitatSlug}`);

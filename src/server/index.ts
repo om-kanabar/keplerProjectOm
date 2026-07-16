@@ -1,5 +1,6 @@
 import { createApp } from "./app";
 import { appendServerLog } from "./logs";
+import { stopClock, setListening, getClockState } from "./kepler-stream";
 
 function readHost(): string {
   return process.env.HABITAT_API_HOST ?? "0.0.0.0";
@@ -18,6 +19,9 @@ function readPort(): number {
 const host = readHost();
 const port = readPort();
 const api = createApp();
+if (getClockState().listening) setListening(true);
+process.once("SIGINT", stopClock);
+process.once("SIGTERM", stopClock);
 
 const staticFiles: Record<string, string> = {
   "/": "index.html",
