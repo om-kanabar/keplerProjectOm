@@ -27,4 +27,12 @@ export function registerScanRoutes(app: Hono): void {
       radiusTiles: bounded(c.req.query("radiusTiles") ?? "0", "radiusTiles", 0, 5),
     }));
   });
+  app.post("/scan", async (c) => {
+    const body = await c.req.json<{ sensorStrength?: number; radiusTiles?: number }>();
+    const habitatId = readData().keplerRegistration?.habitatId;
+    if (!habitatId) throw new Error("Habitat is not registered with Kepler.");
+    const eva = getEvaStatus(); if (!eva.humanId) throw new Error("Deploy a human before scanning.");
+    ensureEvaOperational(eva);
+    return Response.json(await fetchWorldScan({ habitatId, x: eva.x, y: eva.y, sensorStrength: bounded(String(body.sensorStrength ?? "60"), "sensorStrength", 0, 100), radiusTiles: bounded(String(body.radiusTiles ?? "0"), "radiusTiles", 0, 5) }));
+  });
 }

@@ -18,7 +18,7 @@ describe("Habitat operator console layout", () => {
     expect(dashboard).not.toContain("AI chat");
   });
 
-  test("keeps future mode slots without rendering their screens", () => {
+  test("renders Display Mode as an ambient fullscreen view while keeping Info Mode reserved", () => {
     const dashboard = readProjectFile("web/src/main.tsx");
 
     expect(dashboard).toContain('"Display"');
@@ -26,7 +26,16 @@ describe("Habitat operator console layout", () => {
     expect(dashboard).toContain('className="mode-slider"');
     expect(dashboard).toContain('aria-label="Habitat display mode"');
     expect(dashboard).toContain('setActiveMode(mode.id)');
-    expect(dashboard).toContain("ModePlaceholder");
+    expect(dashboard).toContain("DisplayModeView");
+    expect(dashboard).toContain('activeMode === "display"');
+    expect(dashboard).toContain('activeMode === "info"');
+    expect(dashboard).toContain("30_000");
+    expect(dashboard).toContain("display-chrome-hidden");
+    expect(dashboard).toContain("Exit display mode");
+    expect(dashboard).toContain("Info Mode");
+    const styles = readProjectFile("web/src/dashboard.css");
+    expect(styles).toContain("display-stars-drift");
+    expect(styles).toContain("display-mode-exit");
   });
 
   test("exposes a logout action through the existing web session", () => {
@@ -39,12 +48,12 @@ describe("Habitat operator console layout", () => {
   test("places habitat subsystems in sidebar navigation", () => {
     const dashboard = readProjectFile("web/src/main.tsx");
 
-    expect(dashboard).toContain('const subsystems = ["Overview", "Modules", "Blueprints", "Resources", "Inventory", "Construction", "Alerts", "Forecast", "Humans", "Scan"]');
+    expect(dashboard).toContain('const subsystems = ["Overview", "Modules", "Blueprints", "Resources", "Inventory", "Construction", "Alerts", "Forecast", "Humans", "EVA", "Scan", "Catalogs", "World", "Server", "Settings"]');
     expect(dashboard).toContain('aria-label="Habitat subsystems"');
     expect(dashboard).toContain("SubsystemView");
     expect(dashboard).toContain('activeSubsystem === "Overview"');
     expect(dashboard).toContain("System view ready.");
-    expect(dashboard).toContain('"Forecast", "Humans", "Scan"');
+    expect(dashboard).toContain('"Forecast", "Humans", "EVA", "Scan"');
     expect(dashboard).toContain('label="Forecast"');
     expect(dashboard).toContain('label="Humans"');
     expect(dashboard).toContain('label="Scan"');
@@ -59,6 +68,8 @@ describe("Habitat operator console layout", () => {
     expect(dashboard).toContain("amount > 0");
     expect(dashboard).toContain("Resources required");
     expect(dashboard).toContain("Build");
+    expect(dashboard).not.toContain('label="Add inventory"');
+    expect(dashboard).not.toContain('/resources/add');
   });
 
   test("renders blueprint details as a fullscreen overlay with a back button", () => {
@@ -97,7 +108,7 @@ describe("Habitat operator console layout", () => {
     expect(compactStyles).toContain('--dashboard-font-mono:"SpaceMono"');
     expect(styles.replace(/\s+/g, "")).toContain('--dashboard-accent:#d1bd8e');
     expect(styles).not.toContain("#91bdf3");
-    expect(styles).not.toContain("gradient");
+    expect(styles).not.toContain("linear-gradient");
   });
 
   test("does not keep a browser-side custom tick form", () => {
