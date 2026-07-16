@@ -48,15 +48,20 @@ describe("Habitat operator console layout", () => {
   test("places habitat subsystems in sidebar navigation", () => {
     const dashboard = readProjectFile("web/src/main.tsx");
 
-    expect(dashboard).toContain('const subsystems = ["Overview", "Modules", "Blueprints", "Resources", "Inventory", "Construction", "Alerts", "Forecast", "Humans", "EVA", "Scan", "Catalogs", "World", "Server", "Settings"]');
+    expect(dashboard).toContain('const subsystems = ["Overview", "Modules", "Blueprints", "Resources", "Inventory", "Construction", "Alerts", "Forecast", "Humans", "EVA", "Catalogs", "World", "Server", "Settings"]');
     expect(dashboard).toContain('aria-label="Habitat subsystems"');
     expect(dashboard).toContain("SubsystemView");
     expect(dashboard).toContain('activeSubsystem === "Overview"');
     expect(dashboard).toContain("System view ready.");
-    expect(dashboard).toContain('"Forecast", "Humans", "EVA", "Scan"');
+    expect(dashboard).toContain('"Forecast", "Humans", "EVA", "Catalogs"');
     expect(dashboard).toContain('label="Forecast"');
     expect(dashboard).toContain('label="Humans"');
-    expect(dashboard).toContain('label="Scan"');
+    expect(dashboard).toContain('new URLSearchParams(window.location.search).has("dev")');
+    expect(dashboard).toContain('item !== "Server" || showDev');
+    expect(dashboard).toContain("eva-map");
+    expect(dashboard).toContain("Guided explorer controls");
+    expect(dashboard).toContain("length: 2500");
+    expect(dashboard).toContain("50 by 50 EVA movement map");
   });
 
   test("loads blueprint details and catalog resources from the live endpoints", () => {
