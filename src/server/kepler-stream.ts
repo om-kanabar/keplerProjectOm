@@ -6,6 +6,7 @@ export type ClockEvent = { absoluteTick: number; advancedBy: number; issuedAt: s
 const DEFAULT_STATE: HabitatClockState = { mode: "manual", listening: false, connectionStatus: "disconnected", latestKeplerTick: null, latestAdvancedBy: null, lastConnectedAt: null, lastMessageAt: null, lastError: null };
 let socket: WebSocket | null = null;
 let authenticated = false;
+let messageQueue: Promise<void> = Promise.resolve();
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<(event: ClockEvent) => void>();
 
@@ -24,8 +25,8 @@ function connect(): void {
   if (!state.listening || !registration?.streamUrl || !registration.apiToken) { save({ connectionStatus: "error", lastError: "Kepler stream credentials are missing from registration." }); return; }
   try {
     socket = new WebSocket(registration.streamUrl);
-    socket.onopen = () => { authenticated = false; save({ connectionStatus: "connected", lastConnectedAt: new Date().toISOString(), lastError: null }); socket?.send(JSON.stringify({ type: "hello", apiToken: registration.apiToken, subscribe: (registration.stream?.subscriptions ?? []).filter((item) => item === "ticks") })); };
-    socket.onmessage = (message) => { void handleMessage(String(message.data)); };
+    socket.onopen = () => { authenticated = false; save({ connectionStatus: "connecting", lastError: null }); socket?.send(JSON.stringify({ type: "hello", apiToken: registration.apiToken, subscribe: (registration.stream?.subscriptions ?? []).filter((item) => item === "ticks") })); };
+    socket.onmessage = (message) => { messageQueue = messageQueue.then(() => handleMessage(String(message.data))).catch(() => undefined); };
     socket.onerror = () => save({ connectionStatus: "error", lastError: "Kepler WebSocket connection failed." });
     socket.onclose = () => { socket = null; if (getClockState().listening) { save({ connectionStatus: "disconnected" }); reconnectTimer = setTimeout(connect, 1000); } };
   } catch (error) { save({ connectionStatus: "error", lastError: error instanceof Error ? error.message : "Unable to connect to Kepler." }); reconnectTimer = setTimeout(connect, 1000); }
@@ -34,7 +35,20 @@ async function handleMessage(raw: string): Promise<void> {
   let value: unknown; try { value = JSON.parse(raw); } catch { return; }
   if (!value || typeof value !== "object") return;
   const notice = value as Record<string, unknown>;
-  if (notice.type === "hello_ack") { const registration = readData().keplerRegistration; if (notice.habitatId !== registration?.habitatId || notice.ok === false) { save({ connectionStatus: "error", lastError: "Kepler rejected the Habitat stream hello." }); socket?.close(); return; } authenticated = true; return; }
+  if (notice.type === "hello_ack") {
+    const registration = readData().keplerRegistration;
+    const subscribed = Array.isArray(notice.subscribe) ? notice.subscribe : Array.isArray(notice.subscriptions) ? notice.subscriptions : [];
+    const requestedTicks = (registration?.stream?.subscriptions ?? []).includes("ticks");
+    if (notice.habitatId !== registration?.habitatId || notice.ok !== true || (requestedTicks && !subscribed.includes("ticks"))) {
+      authenticated = false;
+      save({ connectionStatus: "error", lastError: "Kepler rejected the Habitat stream hello." });
+      socket?.close();
+      return;
+    }
+    authenticated = true;
+    save({ connectionStatus: "connected", lastConnectedAt: new Date().toISOString(), lastError: null });
+    return;
+  }
   if (notice.type !== "planet_tick" || !authenticated || !getClockState().listening) return;
   const tick = notice.tick; const advancedBy = notice.advancedBy;
   if (typeof tick !== "number" || !Number.isInteger(tick) || typeof advancedBy !== "number" || !Number.isInteger(advancedBy) || advancedBy <= 0) return;

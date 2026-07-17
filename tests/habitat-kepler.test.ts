@@ -1112,6 +1112,23 @@ describe("Kepler habitat registration commands", () => {
     }
   });
 
+  test("upgrades a legacy registration in place without replacing local modules", async () => {
+    const server = await startTestServer();
+    try {
+      writeData({
+        keplerRegistration: { habitatUuid: "11111111-1111-4111-8111-111111111111", habitatId: "habitat-server-123", displayName: "Legacy Habitat" },
+        modules: [{ id: "local-module", blueprintId: "local", displayName: "Local Module", connectedTo: [], runtimeAttributes: {}, capabilities: [], source: "local" }],
+      });
+      const planetToken = process.env.KEPLER_PLANET_TOKEN;
+      const result = await runHabitat(["register", "--name", "Ignored New Name"], server);
+      expect(result.exitCode).toBe(0);
+      expect(server.requests[0].body).toMatchObject({ displayName: "Legacy Habitat", habitatUuid: "11111111-1111-4111-8111-111111111111" });
+      expect(readData().keplerRegistration).toMatchObject({ displayName: "Legacy Habitat", streamUrl: "wss://planet.turingguild.com/planet/stream", apiToken: "habitat-stream-secret", stream: { currentTick: 800, status: "running", ticksPerPulse: 1 } });
+      expect(readData().modules).toEqual([{ id: "local-module", blueprintId: "local", displayName: "Local Module", connectedTo: [], runtimeAttributes: {}, capabilities: [], source: "local" }]);
+      expect(process.env.KEPLER_PLANET_TOKEN).toBe(planetToken);
+    } finally { server.close(); }
+  });
+
   test("status fetches the registered habitat status from Kepler", async () => {
     const server = await startTestServer();
     writeData({

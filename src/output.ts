@@ -58,6 +58,8 @@ export function printKeplerRegistration(
   console.log(`  Stream API Token: ${registration.apiToken ?? "(not provided)"}`);
   console.log(`  Stream Subscriptions: ${registration.stream?.subscriptions?.join(", ") ?? "(none)"}`);
   if (registration.stream?.currentTick !== undefined) console.log(`  Registration Tick: ${registration.stream.currentTick}`);
+  if (registration.stream?.status !== undefined) console.log(`  Registration Clock Status: ${registration.stream.status}`);
+  if (registration.stream?.ticksPerPulse !== undefined) console.log(`  Ticks Per Pulse: ${registration.stream.ticksPerPulse}`);
 
   if (registration.habitatSlug) {
     console.log(`  Slug: ${registration.habitatSlug}`);

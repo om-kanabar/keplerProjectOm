@@ -138,22 +138,26 @@ function updateRegistrationFromHabitat(
 
 export async function registerWithKepler(displayName: string): Promise<KeplerRegistration> {
   const data = readData();
+  const existing = data.keplerRegistration;
 
-  if (data.keplerRegistration?.habitatId) {
+  if (existing?.habitatId && existing.apiToken) {
     throw new Error(
-      `Habitat is already registered as "${data.keplerRegistration.displayName}" (${data.keplerRegistration.habitatId}).`,
+      `Habitat is already registered as "${existing.displayName}" (${existing.habitatId}).`,
     );
   }
 
-  const habitatUuid = data.keplerRegistration?.habitatUuid ?? randomUUID();
+  const isLegacyUpgrade = Boolean(existing?.habitatId && !existing.apiToken);
+  const habitatUuid = existing?.habitatUuid ?? randomUUID();
+  const registrationName = isLegacyUpgrade ? existing!.displayName : displayName;
   const response = await requestKepler<HabitatRegistrationResponse>("POST", "/habitats/register", {
-    displayName,
+    displayName: registrationName,
     habitatUuid,
   });
   const registration: KeplerRegistration = {
+    ...(existing ?? {}),
     habitatUuid,
-    habitatId: response.habitatId,
-    displayName,
+    habitatId: response.habitatId ?? existing?.habitatId!,
+    displayName: registrationName,
     blueprints: response.blueprints,
     streamUrl: response.streamUrl,
     apiToken: response.apiToken,
@@ -163,10 +167,10 @@ export async function registerWithKepler(displayName: string): Promise<KeplerReg
   writeData({
     ...data,
     keplerRegistration: registration,
-    modules: hydrateStarterModules(response.starterModules),
+    modules: data.modules ?? hydrateStarterModules(response.starterModules),
     humans: hydrateStarterHumans(response.starterHumans ?? []),
     alertContract: response.contracts?.alerts,
-    clockState: { mode: "manual", listening: false, connectionStatus: "disconnected", latestKeplerTick: null, latestAdvancedBy: null, lastConnectedAt: null, lastMessageAt: null, lastError: null },
+    clockState: data.clockState ?? { mode: "manual", listening: false, connectionStatus: "disconnected", latestKeplerTick: null, latestAdvancedBy: null, lastConnectedAt: null, lastMessageAt: null, lastError: null },
   });
 
   return registration;
