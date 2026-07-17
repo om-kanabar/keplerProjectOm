@@ -8,13 +8,24 @@ let socket: WebSocket | null = null;
 let authenticated = false;
 let messageQueue: Promise<void> = Promise.resolve();
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let connectionGeneration = 0;
 const listeners = new Set<(event: ClockEvent) => void>();
 
 export function getClockState(): HabitatClockState { return readData().clockState ?? DEFAULT_STATE; }
 function save(patch: Partial<HabitatClockState>): HabitatClockState { const next = { ...DEFAULT_STATE, ...getClockState(), ...patch }; writeData({ ...readData(), clockState: next }); return next; }
 export function subscribeClockEvents(listener: (event: ClockEvent) => void): () => void { listeners.add(listener); return () => listeners.delete(listener); }
 export function setListening(enabled: boolean): HabitatClockState {
-  if (!enabled) { if (reconnectTimer) clearTimeout(reconnectTimer); reconnectTimer = null; socket?.close(); socket = null; return save({ mode: "manual", listening: false, connectionStatus: "disconnected", lastError: null }); }
+  if (!enabled) {
+    connectionGeneration += 1;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    socket?.close();
+    socket = null;
+    authenticated = false;
+    return save({ mode: "manual", listening: false, connectionStatus: "disconnected", lastError: null });
+  }
+  if (getClockState().listening && socket) return getClockState();
+  if (getClockState().listening && reconnectTimer) return getClockState();
   const state = save({ mode: "kepler", listening: true, connectionStatus: "connecting", lastError: null });
   connect();
   return state;
@@ -23,13 +34,22 @@ function connect(): void {
   const registration = readData().keplerRegistration;
   const state = getClockState();
   if (!state.listening || !registration?.streamUrl || !registration.apiToken) { save({ connectionStatus: "error", lastError: "Kepler stream credentials are missing from registration." }); return; }
+  const generation = ++connectionGeneration;
   try {
-    socket = new WebSocket(registration.streamUrl);
-    socket.onopen = () => { authenticated = false; save({ connectionStatus: "connecting", lastError: null }); socket?.send(JSON.stringify({ type: "hello", apiToken: registration.apiToken, subscribe: (registration.stream?.subscriptions ?? []).filter((item) => item === "ticks") })); };
-    socket.onmessage = (message) => { messageQueue = messageQueue.then(() => handleMessage(String(message.data))).catch(() => undefined); };
-    socket.onerror = () => save({ connectionStatus: "error", lastError: "Kepler WebSocket connection failed." });
-    socket.onclose = () => { socket = null; if (getClockState().listening) { save({ connectionStatus: "disconnected" }); reconnectTimer = setTimeout(connect, 1000); } };
-  } catch (error) { save({ connectionStatus: "error", lastError: error instanceof Error ? error.message : "Unable to connect to Kepler." }); reconnectTimer = setTimeout(connect, 1000); }
+    const nextSocket = new WebSocket(registration.streamUrl);
+    socket = nextSocket;
+    nextSocket.onopen = () => { if (generation !== connectionGeneration || socket !== nextSocket) return; authenticated = false; save({ connectionStatus: "connecting", lastError: null }); nextSocket.send(JSON.stringify({ type: "hello", apiToken: registration.apiToken, subscribe: (registration.stream?.subscriptions ?? []).filter((item) => item === "ticks") })); };
+    nextSocket.onmessage = (message) => { if (generation !== connectionGeneration || socket !== nextSocket) return; messageQueue = messageQueue.then(() => handleMessage(String(message.data))).catch(() => undefined); };
+    nextSocket.onerror = () => { if (generation === connectionGeneration && socket === nextSocket) save({ connectionStatus: "error", lastError: "Kepler WebSocket connection failed." }); };
+    nextSocket.onclose = () => { if (generation !== connectionGeneration || socket !== nextSocket) return; socket = null; if (getClockState().listening) { save({ connectionStatus: "disconnected" }); reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, 1000); } };
+  } catch (error) {
+    if (generation !== connectionGeneration) return;
+    save({ connectionStatus: "error", lastError: error instanceof Error ? error.message : "Unable to connect to Kepler." });
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (generation === connectionGeneration && getClockState().listening) connect();
+    }, 1000);
+  }
 }
 async function handleMessage(raw: string): Promise<void> {
   let value: unknown; try { value = JSON.parse(raw); } catch { return; }
